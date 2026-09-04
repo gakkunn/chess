@@ -11,3 +11,6 @@ out/
 
 ### Chess project ###
 server/**/db.properties
+
+### Local course documentation ###
+/docs/
