@@ -137,6 +137,22 @@ public class ChessPiece {
             return moves;
         }
 
+        if (pieceType == PieceType.QUEEN) {
+            List<ChessMove> moves = new ArrayList<>();
+
+            addMovesInDirection(board, myPosition, moves, 1, 0);
+            addMovesInDirection(board, myPosition, moves, -1, 0);
+            addMovesInDirection(board, myPosition, moves, 0, 1);
+            addMovesInDirection(board, myPosition, moves, 0, -1);
+
+            addMovesInDirection(board, myPosition, moves, 1, 1);
+            addMovesInDirection(board, myPosition, moves, 1, -1);
+            addMovesInDirection(board, myPosition, moves, -1, 1);
+            addMovesInDirection(board, myPosition, moves, -1, -1);
+
+            return moves;
+        }
+
         throw new RuntimeException("Not implemented");
     }
 
