@@ -1,6 +1,8 @@
 package chess;
 
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.List;
 import java.util.Objects;
 
 /**
@@ -69,6 +71,29 @@ public class ChessPiece {
      * @return Collection of valid moves
      */
     public Collection<ChessMove> pieceMoves(ChessBoard board, ChessPosition myPosition) {
+        if (pieceType == PieceType.KNIGHT) {
+            List<ChessMove> moves = new ArrayList<>();
+            int[][] offsets = {
+                    {2, 1}, {2, -1}, {-2, 1}, {-2, -1},
+                    {1, 2}, {1, -2}, {-1, 2}, {-1, -2}
+            };
+
+            for (int[] offset : offsets) {
+                int row = myPosition.getRow() + offset[0];
+                int column = myPosition.getColumn() + offset[1];
+                if (row < 1 || row > 8 || column < 1 || column > 8) {
+                    continue;
+                }
+
+                ChessPosition destination = new ChessPosition(row, column);
+                ChessPiece pieceAtDestination = board.getPiece(destination);
+                if (pieceAtDestination == null || pieceAtDestination.getTeamColor() != teamColor) {
+                    moves.add(new ChessMove(myPosition, destination, null));
+                }
+            }
+            return moves;
+        }
+
         throw new RuntimeException("Not implemented");
     }
 }
