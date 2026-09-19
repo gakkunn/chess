@@ -153,6 +153,42 @@ public class ChessPiece {
             return moves;
         }
 
+        if (pieceType == PieceType.PAWN) {
+            List<ChessMove> moves = new ArrayList<>();
+            int direction = teamColor == ChessGame.TeamColor.WHITE ? 1 : -1;
+            int startingRow = teamColor == ChessGame.TeamColor.WHITE ? 2 : 7;
+
+            int nextRow = myPosition.getRow() + direction;
+            ChessPosition oneSquareForward = new ChessPosition(nextRow, myPosition.getColumn());
+
+            if (board.getPiece(oneSquareForward) == null) {
+                moves.add(new ChessMove(myPosition, oneSquareForward, null));
+
+                if (myPosition.getRow() == startingRow) {
+                    ChessPosition twoSquaresForward =
+                            new ChessPosition(nextRow + direction, myPosition.getColumn());
+                    if (board.getPiece(twoSquaresForward) == null) {
+                        moves.add(new ChessMove(myPosition, twoSquaresForward, null));
+                    }
+                }
+            }
+
+            for (int columnChange : new int[]{-1, 1}) {
+                int column = myPosition.getColumn() + columnChange;
+                if (column < 1 || column > 8) {
+                    continue;
+                }
+
+                ChessPosition diagonal = new ChessPosition(nextRow, column);
+                ChessPiece pieceAtDiagonal = board.getPiece(diagonal);
+                if (pieceAtDiagonal != null && pieceAtDiagonal.getTeamColor() != teamColor) {
+                    moves.add(new ChessMove(myPosition, diagonal, null));
+                }
+            }
+
+            return moves;
+        }
+
         throw new RuntimeException("Not implemented");
     }
 
