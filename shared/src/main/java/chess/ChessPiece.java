@@ -128,6 +128,15 @@ public class ChessPiece {
             return moves;
         }
 
+        if (pieceType == PieceType.BISHOP) {
+            List<ChessMove> moves = new ArrayList<>();
+            addMovesInDirection(board, myPosition, moves, 1, 1);
+            addMovesInDirection(board, myPosition, moves, 1, -1);
+            addMovesInDirection(board, myPosition, moves, -1, 1);
+            addMovesInDirection(board, myPosition, moves, -1, -1);
+            return moves;
+        }
+
         throw new RuntimeException("Not implemented");
     }
 
