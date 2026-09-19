@@ -57,6 +57,32 @@ public class ChessBoard {
      * (How the game of chess normally starts)
      */
     public void resetBoard() {
-        throw new RuntimeException("Not implemented");
+        for (ChessPiece[] row : squares) {
+            Arrays.fill(row, null);
+        }
+
+        ChessPiece.PieceType[] backRow = {
+                ChessPiece.PieceType.ROOK,
+                ChessPiece.PieceType.KNIGHT,
+                ChessPiece.PieceType.BISHOP,
+                ChessPiece.PieceType.QUEEN,
+                ChessPiece.PieceType.KING,
+                ChessPiece.PieceType.BISHOP,
+                ChessPiece.PieceType.KNIGHT,
+                ChessPiece.PieceType.ROOK
+        };
+
+        for (int column = 1; column <= 8; column++) {
+            ChessPiece.PieceType type = backRow[column - 1];
+
+            addPiece(new ChessPosition(1, column),
+                    new ChessPiece(ChessGame.TeamColor.WHITE, type));
+            addPiece(new ChessPosition(2, column),
+                    new ChessPiece(ChessGame.TeamColor.WHITE, ChessPiece.PieceType.PAWN));
+            addPiece(new ChessPosition(7, column),
+                    new ChessPiece(ChessGame.TeamColor.BLACK, ChessPiece.PieceType.PAWN));
+            addPiece(new ChessPosition(8, column),
+                    new ChessPiece(ChessGame.TeamColor.BLACK, type));
+        }
     }
 }
