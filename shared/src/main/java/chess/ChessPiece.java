@@ -71,6 +71,31 @@ public class ChessPiece {
      * @return Collection of valid moves
      */
     public Collection<ChessMove> pieceMoves(ChessBoard board, ChessPosition myPosition) {
+        if (pieceType == PieceType.KING) {
+            List<ChessMove> moves = new ArrayList<>();
+
+            for (int rowChange = -1; rowChange <= 1; rowChange++) {
+                for (int columnChange = -1; columnChange <= 1; columnChange++) {
+                    if (rowChange == 0 && columnChange == 0) {
+                        continue;
+                    }
+
+                    int row = myPosition.getRow() + rowChange;
+                    int column = myPosition.getColumn() + columnChange;
+                    if (row < 1 || row > 8 || column < 1 || column > 8) {
+                        continue;
+                    }
+
+                    ChessPosition destination = new ChessPosition(row, column);
+                    ChessPiece pieceAtDestination = board.getPiece(destination);
+                    if (pieceAtDestination == null || pieceAtDestination.getTeamColor() != teamColor) {
+                        moves.add(new ChessMove(myPosition, destination, null));
+                    }
+                }
+            }
+            return moves;
+        }
+
         if (pieceType == PieceType.KNIGHT) {
             List<ChessMove> moves = new ArrayList<>();
             int[][] offsets = {
