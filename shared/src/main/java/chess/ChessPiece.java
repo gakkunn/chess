@@ -119,6 +119,38 @@ public class ChessPiece {
             return moves;
         }
 
+        if (pieceType == PieceType.ROOK) {
+            List<ChessMove> moves = new ArrayList<>();
+            addMovesInDirection(board, myPosition, moves, 1, 0);
+            addMovesInDirection(board, myPosition, moves, -1, 0);
+            addMovesInDirection(board, myPosition, moves, 0, 1);
+            addMovesInDirection(board, myPosition, moves, 0, -1);
+            return moves;
+        }
+
         throw new RuntimeException("Not implemented");
+    }
+
+    private void addMovesInDirection(ChessBoard board, ChessPosition start,
+                                     List<ChessMove> moves, int rowChange, int columnChange) {
+        int row = start.getRow() + rowChange;
+        int column = start.getColumn() + columnChange;
+
+        while (row >= 1 && row <= 8 && column >= 1 && column <= 8) {
+            ChessPosition destination = new ChessPosition(row, column);
+            ChessPiece pieceAtDestination = board.getPiece(destination);
+
+            if (pieceAtDestination == null) {
+                moves.add(new ChessMove(start, destination, null));
+            } else {
+                if (pieceAtDestination.getTeamColor() != teamColor) {
+                    moves.add(new ChessMove(start, destination, null));
+                }
+                break;
+            }
+
+            row += rowChange;
+            column += columnChange;
+        }
     }
 }
