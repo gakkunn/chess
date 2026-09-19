@@ -162,7 +162,7 @@ public class ChessPiece {
             ChessPosition oneSquareForward = new ChessPosition(nextRow, myPosition.getColumn());
 
             if (board.getPiece(oneSquareForward) == null) {
-                moves.add(new ChessMove(myPosition, oneSquareForward, null));
+                addPawnMove(moves, myPosition, oneSquareForward);
 
                 if (myPosition.getRow() == startingRow) {
                     ChessPosition twoSquaresForward =
@@ -182,14 +182,27 @@ public class ChessPiece {
                 ChessPosition diagonal = new ChessPosition(nextRow, column);
                 ChessPiece pieceAtDiagonal = board.getPiece(diagonal);
                 if (pieceAtDiagonal != null && pieceAtDiagonal.getTeamColor() != teamColor) {
-                    moves.add(new ChessMove(myPosition, diagonal, null));
+                    addPawnMove(moves, myPosition, diagonal);
                 }
             }
 
             return moves;
         }
 
-        throw new RuntimeException("Not implemented");
+        throw new IllegalStateException("Unknown piece type");
+    }
+
+    private void addPawnMove(List<ChessMove> moves, ChessPosition start, ChessPosition destination) {
+        boolean reachesLastRow = destination.getRow() == 1 || destination.getRow() == 8;
+
+        if (reachesLastRow) {
+            moves.add(new ChessMove(start, destination, PieceType.QUEEN));
+            moves.add(new ChessMove(start, destination, PieceType.BISHOP));
+            moves.add(new ChessMove(start, destination, PieceType.ROOK));
+            moves.add(new ChessMove(start, destination, PieceType.KNIGHT));
+        } else {
+            moves.add(new ChessMove(start, destination, null));
+        }
     }
 
     private void addMovesInDirection(ChessBoard board, ChessPosition start,
