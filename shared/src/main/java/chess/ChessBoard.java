@@ -16,6 +16,31 @@ public class ChessBoard {
     }
 
     /**
+     * Creates a board with the same piece arrangement as another board.
+     * Each piece is recreated so that the two boards are fully independent.
+     *
+     * @param source the board to copy
+     */
+    public ChessBoard(ChessBoard source) {
+        for (int row = 1; row <= 8; row++) {
+            for (int column = 1; column <= 8; column++) {
+                ChessPosition position = new ChessPosition(row, column);
+                ChessPiece sourcePiece = source.getPiece(position);
+
+                if (sourcePiece == null) {
+                    continue;
+                }
+
+                ChessPiece copiedPiece = new ChessPiece(
+                        sourcePiece.getTeamColor(),
+                        sourcePiece.getPieceType());
+
+                addPiece(position, copiedPiece);
+            }
+        }
+    }
+
+    /**
      * Adds a chess piece to the chessboard
      *
      * @param position where to add the piece to
