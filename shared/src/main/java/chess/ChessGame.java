@@ -71,7 +71,75 @@ public class ChessGame {
      * @return True if the specified team is in check
      */
     public boolean isInCheck(TeamColor teamColor) {
-        throw new RuntimeException("Not implemented");
+        return isInCheck(board, teamColor);
+    }
+
+    /**
+     * Checks whether a team's king is being attacked on a particular board.
+     * This overload will also be useful when a move is tested on a copied board.
+     */
+    private boolean isInCheck(ChessBoard boardToCheck, TeamColor teamColor) {
+        ChessPosition kingPosition = findKingPosition(boardToCheck, teamColor);
+
+        if (kingPosition == null) {
+            return false;
+        }
+
+        TeamColor opponentColor;
+        if (teamColor == TeamColor.WHITE) {
+            opponentColor = TeamColor.BLACK;
+        } else {
+            opponentColor = TeamColor.WHITE;
+        }
+
+        for (int row = 1; row <= 8; row++) {
+            for (int column = 1; column <= 8; column++) {
+                ChessPosition opponentPosition = new ChessPosition(row, column);
+                ChessPiece opponentPiece = boardToCheck.getPiece(opponentPosition);
+
+                if (opponentPiece == null || opponentPiece.getTeamColor() != opponentColor) {
+                    continue;
+                }
+
+                Collection<ChessMove> opponentMoves =
+                        opponentPiece.pieceMoves(boardToCheck, opponentPosition);
+
+                for (ChessMove opponentMove : opponentMoves) {
+                    if (opponentMove.getEndPosition().equals(kingPosition)) {
+                        return true;
+                    }
+                }
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Finds the king belonging to the requested team.
+     *
+     * @return the king's position, or null when that king is not on the board
+     */
+    private ChessPosition findKingPosition(ChessBoard boardToSearch, TeamColor teamColor) {
+        for (int row = 1; row <= 8; row++) {
+            for (int column = 1; column <= 8; column++) {
+                ChessPosition position = new ChessPosition(row, column);
+                ChessPiece piece = boardToSearch.getPiece(position);
+
+                if (piece == null) {
+                    continue;
+                }
+
+                boolean belongsToRequestedTeam = piece.getTeamColor() == teamColor;
+                boolean isKing = piece.getPieceType() == ChessPiece.PieceType.KING;
+
+                if (belongsToRequestedTeam && isKing) {
+                    return position;
+                }
+            }
+        }
+
+        return null;
     }
 
     /**
