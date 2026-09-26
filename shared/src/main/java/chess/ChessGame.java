@@ -1,5 +1,6 @@
 package chess;
 
+import java.util.ArrayList;
 import java.util.Collection;
 
 /**
@@ -51,7 +52,39 @@ public class ChessGame {
      * startPosition
      */
     public Collection<ChessMove> validMoves(ChessPosition startPosition) {
-        throw new RuntimeException("Not implemented");
+        ChessPiece movingPiece = board.getPiece(startPosition);
+
+        if (movingPiece == null) {
+            return null;
+        }
+
+        Collection<ChessMove> pieceMoves = movingPiece.pieceMoves(board, startPosition);
+        Collection<ChessMove> validMoves = new ArrayList<>();
+
+        for (ChessMove move : pieceMoves) {
+            ChessBoard boardAfterMove = new ChessBoard(board);
+            movePieceOnBoard(boardAfterMove, move);
+
+            boolean kingWouldBeInCheck =
+                    isInCheck(boardAfterMove, movingPiece.getTeamColor());
+
+            if (!kingWouldBeInCheck) {
+                validMoves.add(move);
+            }
+        }
+
+        return validMoves;
+    }
+
+    /**
+     * Moves a piece on the supplied board without changing the game turn.
+     * This is used to test a possible move on a copied board.
+     */
+    private void movePieceOnBoard(ChessBoard boardToChange, ChessMove move) {
+        ChessPiece movingPiece = boardToChange.getPiece(move.getStartPosition());
+
+        boardToChange.addPiece(move.getStartPosition(), null);
+        boardToChange.addPiece(move.getEndPosition(), movingPiece);
     }
 
     /**
