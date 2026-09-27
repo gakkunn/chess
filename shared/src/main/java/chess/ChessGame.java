@@ -230,7 +230,36 @@ public class ChessGame {
      * @return True if the specified team is in checkmate
      */
     public boolean isInCheckmate(TeamColor teamColor) {
-        throw new RuntimeException("Not implemented");
+        if (!isInCheck(teamColor)) {
+            return false;
+        }
+
+        return !hasAnyValidMove(teamColor);
+    }
+
+    /**
+     * Searches every piece belonging to a team and reports whether at least one
+     * of those pieces has a legal move.
+     */
+    private boolean hasAnyValidMove(TeamColor teamColor) {
+        for (int row = 1; row <= 8; row++) {
+            for (int column = 1; column <= 8; column++) {
+                ChessPosition position = new ChessPosition(row, column);
+                ChessPiece piece = board.getPiece(position);
+
+                if (piece == null || piece.getTeamColor() != teamColor) {
+                    continue;
+                }
+
+                Collection<ChessMove> movesForPiece = validMoves(position);
+
+                if (movesForPiece != null && !movesForPiece.isEmpty()) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     /**
