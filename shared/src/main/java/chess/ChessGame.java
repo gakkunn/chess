@@ -117,12 +117,32 @@ public class ChessGame {
         }
 
         movePieceOnBoard(board, move);
+        promotePawnIfNeeded(move, movingPiece);
 
         if (teamTurn == TeamColor.WHITE) {
             teamTurn = TeamColor.BLACK;
         } else {
             teamTurn = TeamColor.WHITE;
         }
+    }
+
+    /**
+     * Replaces a pawn with the selected promotion piece after it reaches the
+     * opposite end of the board. The move has already been validated before
+     * this method is called.
+     */
+    private void promotePawnIfNeeded(ChessMove move, ChessPiece movingPiece) {
+        ChessPiece.PieceType promotionType = move.getPromotionPiece();
+
+        if (promotionType == null) {
+            return;
+        }
+
+        ChessPiece promotedPiece = new ChessPiece(
+                movingPiece.getTeamColor(),
+                promotionType);
+
+        board.addPiece(move.getEndPosition(), promotedPiece);
     }
 
     /**
