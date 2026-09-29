@@ -2,6 +2,7 @@ package chess;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Objects;
 
 /**
  * A class that can manage a chess game, making moves on a board
@@ -275,6 +276,27 @@ public class ChessGame {
         }
 
         return !hasAnyValidMove(teamColor);
+    }
+
+    @Override
+    public boolean equals(Object other) {
+        if (this == other) {
+            return true;
+        }
+
+        if (!(other instanceof ChessGame otherGame)) {
+            return false;
+        }
+
+        boolean sameTurn = teamTurn == otherGame.teamTurn;
+        boolean sameBoard = Objects.equals(board, otherGame.board);
+
+        return sameTurn && sameBoard;
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(teamTurn, board);
     }
 
     /**
