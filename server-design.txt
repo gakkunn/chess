@@ -3,9 +3,12 @@ title Chess Server Design
 actor Client
 participant Server
 participant UserHandler
+participant GameHandler
 participant UserService
+participant GameService
 participant UserDAO
 participant AuthDAO
+participant GameDAO
 database Database
 
 entryspacing 0.9
@@ -120,7 +123,35 @@ note over Server,Database: A failed DAO operation throws DataAccessException.\nT
 end
 
 group#red #pink List Games
+note over GameHandler,GameDAO: ListGamesRequest(authToken)\nListGamesResult(games)\nGameData(gameID, whiteUsername, blackUsername, gameName, game)\nGameSummary(gameID, whiteUsername, blackUsername, gameName)
 Client -> Server: [GET] /game\nauthorization: <authToken>
+Server -> GameHandler: handleListGames(authorizationHeader)
+GameHandler -> GameHandler: create ListGamesRequest from the header
+GameHandler -> GameService: listGames(ListGamesRequest)
+
+GameService -> AuthDAO: getAuth(authToken)
+AuthDAO -> Database: find AuthData by authToken
+Database --> AuthDAO: AuthData or null
+AuthDAO --> GameService: AuthData or null
+
+break The authToken is missing or invalid
+GameService --> Server: UnauthorizedException
+Server --> Client: 401\n{"message":"Error: unauthorized"}
+end
+
+GameService -> GameDAO: listGames()
+GameDAO -> Database: find all GameData records
+Database --> GameDAO: List<GameData>
+GameDAO --> GameService: List<GameData>
+GameService -> GameService: convert each GameData to GameSummary
+
+GameService --> GameHandler: ListGamesResult(games)
+GameHandler -> GameHandler: serialize ListGamesResult
+GameHandler --> Server: responseBody
+Server --> Client: 200\n{"games":[{"gameID":1234,\n"whiteUsername":null, "blackUsername":null,\n"gameName":""}]}
+
+note over GameHandler,GameDAO: The games array may be empty.\nGameSummary omits the internal ChessGame state.
+note over Server,Database: A failed DAO operation throws DataAccessException.\nThe server returns 500 with an error message.
 end
 
 group#d790e0 #E3CCE6 Create Game
