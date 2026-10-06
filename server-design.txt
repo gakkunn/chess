@@ -192,7 +192,57 @@ note over Server,Database: A failed DAO operation throws DataAccessException.\nT
 end
 
 group#yellow #lightyellow Join Game #black
+note over GameHandler,GameDAO: JoinGameRequest(authToken, playerColor, gameID)\nJoinGameResult()\nGameData(gameID, whiteUsername, blackUsername, gameName, game)\nAuthData(authToken, username)
 Client -> Server: [PUT] /game\nauthorization: <authToken>\n{"playerColor":"WHITE/BLACK", "gameID":1234}
+Server -> GameHandler: handleJoinGame(requestBody, authorizationHeader)
+GameHandler -> GameHandler: deserialize the body and read the authToken
+GameHandler -> GameService: joinGame(JoinGameRequest)
+
+break gameID is missing or invalid,\nor playerColor is not WHITE or BLACK
+GameService --> Server: BadRequestException
+Server --> Client: 400\n{"message":"Error: bad request"}
+end
+
+GameService -> AuthDAO: getAuth(authToken)
+AuthDAO -> Database: find AuthData by authToken
+Database --> AuthDAO: AuthData or null
+AuthDAO --> GameService: AuthData or null
+
+break The authToken is missing or invalid
+GameService --> Server: UnauthorizedException
+Server --> Client: 401\n{"message":"Error: unauthorized"}
+end
+
+GameService -> GameDAO: getGame(gameID)
+GameDAO -> Database: find GameData by gameID
+Database --> GameDAO: GameData or null
+GameDAO --> GameService: GameData or null
+
+break The game does not exist
+GameService --> Server: BadRequestException
+Server --> Client: 400\n{"message":"Error: bad request"}
+end
+
+GameService -> GameService: inspect the username for the requested color
+
+break The requested color is already occupied
+GameService --> Server: AlreadyTakenException
+Server --> Client: 403\n{"message":"Error: already taken"}
+end
+
+GameService -> GameService: assign AuthData.username to the requested color
+GameService -> GameDAO: updateGame(GameData)
+GameDAO -> Database: update the stored GameData
+Database --> GameDAO: success
+GameDAO --> GameService: success
+
+GameService --> GameHandler: JoinGameResult()
+GameHandler -> GameHandler: serialize JoinGameResult
+GameHandler --> Server: responseBody
+Server --> Client: 200\n{}
+
+note over GameService,GameDAO: Only the requested color's username changes.\nThe other username and ChessGame state remain unchanged.
+note over Server,Database: A failed DAO operation throws DataAccessException.\nThe server returns 500 with an error message.
 end
 
 group#gray #lightgray Clear Application
