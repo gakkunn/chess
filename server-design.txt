@@ -155,7 +155,40 @@ note over Server,Database: A failed DAO operation throws DataAccessException.\nT
 end
 
 group#d790e0 #E3CCE6 Create Game
+note over GameHandler,GameDAO: CreateGameRequest(authToken, gameName)\nCreateGameResult(gameID)\nGameData(gameID, whiteUsername, blackUsername, gameName, game)\nAuthData(authToken, username)
 Client -> Server: [POST] /game\nauthorization: <authToken>\n{"gameName":""}
+Server -> GameHandler: handleCreateGame(requestBody, authorizationHeader)
+GameHandler -> GameHandler: deserialize the body and read the authToken
+GameHandler -> GameService: createGame(CreateGameRequest)
+
+break gameName is missing
+GameService --> Server: BadRequestException
+Server --> Client: 400\n{"message":"Error: bad request"}
+end
+
+GameService -> AuthDAO: getAuth(authToken)
+AuthDAO -> Database: find AuthData by authToken
+Database --> AuthDAO: AuthData or null
+AuthDAO --> GameService: AuthData or null
+
+break The authToken is missing or invalid
+GameService --> Server: UnauthorizedException
+Server --> Client: 401\n{"message":"Error: unauthorized"}
+end
+
+GameService -> GameService: create GameData(0, null, null,\ngameName, new ChessGame())
+GameService -> GameDAO: createGame(GameData)
+GameDAO -> Database: insert GameData and generate gameID
+Database --> GameDAO: gameID
+GameDAO --> GameService: gameID
+
+GameService --> GameHandler: CreateGameResult(gameID)
+GameHandler -> GameHandler: serialize CreateGameResult
+GameHandler --> Server: responseBody
+Server --> Client: 200\n{"gameID":1234}
+
+note over GameService,GameDAO: GameDAO assigns every new game a unique positive gameID.
+note over Server,Database: A failed DAO operation throws DataAccessException.\nThe server returns 500 with an error message.
 end
 
 group#yellow #lightyellow Join Game #black
