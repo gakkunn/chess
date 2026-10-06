@@ -1,0 +1,77 @@
+title Chess Server Design
+
+actor Client
+participant Server
+participant UserHandler
+participant UserService
+participant UserDAO
+participant AuthDAO
+database Database
+
+entryspacing 0.9
+
+group#43829c #lightblue Register
+note over UserHandler,AuthDAO: RegisterRequest(username, password, email)\nRegisterResult(username, authToken)\nUserData(username, password, email)\nAuthData(authToken, username)
+Client -> Server: [POST] /user\n{"username":"", "password":"", "email":""}
+Server -> UserHandler: handleRegister(requestBody)
+UserHandler -> UserHandler: deserialize RegisterRequest
+UserHandler -> UserService: register(RegisterRequest)
+
+break A required field is missing
+UserService --> Server: BadRequestException
+Server --> Client: 400\n{"message":"Error: bad request"}
+end
+
+UserService -> UserDAO: getUser(username)
+UserDAO -> Database: find UserData by username
+Database --> UserDAO: UserData or null
+
+break The username is already registered
+UserDAO --> UserService: UserData
+UserService --> Server: AlreadyTakenException
+Server --> Client: 403\n{"message":"Error: already taken"}
+end
+
+UserDAO --> UserService: null
+UserService -> UserDAO: createUser(UserData)
+UserDAO -> Database: insert UserData
+Database --> UserDAO: success
+UserDAO --> UserService: success
+
+UserService -> UserService: generateAuthToken()
+UserService -> AuthDAO: createAuth(AuthData)
+AuthDAO -> Database: insert AuthData
+Database --> AuthDAO: success
+AuthDAO --> UserService: success
+
+UserService --> UserHandler: RegisterResult(username, authToken)
+UserHandler -> UserHandler: serialize RegisterResult
+UserHandler --> Server: responseBody
+Server --> Client: 200\n{"username":"", "authToken":""}
+
+note over Server,Database: A failed DAO operation throws DataAccessException.\nThe server returns 500 with an error message.
+end
+
+group#orange #FCEDCA Login
+Client -> Server: [POST] /session\n{"username":"", "password":""}
+end
+
+group#green #lightgreen Logout
+Client -> Server: [DELETE] /session\nauthorization: <authToken>
+end
+
+group#red #pink List Games
+Client -> Server: [GET] /game\nauthorization: <authToken>
+end
+
+group#d790e0 #E3CCE6 Create Game
+Client -> Server: [POST] /game\nauthorization: <authToken>\n{"gameName":""}
+end
+
+group#yellow #lightyellow Join Game #black
+Client -> Server: [PUT] /game\nauthorization: <authToken>\n{"playerColor":"WHITE/BLACK", "gameID":1234}
+end
+
+group#gray #lightgray Clear Application
+Client -> Server: [DELETE] /db
+end
