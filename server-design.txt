@@ -90,7 +90,33 @@ note over Server,Database: A failed DAO operation throws DataAccessException.\nT
 end
 
 group#green #lightgreen Logout
+note over UserHandler,AuthDAO: LogoutRequest(authToken)\nLogoutResult()\nAuthData(authToken, username)
 Client -> Server: [DELETE] /session\nauthorization: <authToken>
+Server -> UserHandler: handleLogout(authorizationHeader)
+UserHandler -> UserHandler: create LogoutRequest from the header
+UserHandler -> UserService: logout(LogoutRequest)
+
+UserService -> AuthDAO: getAuth(authToken)
+AuthDAO -> Database: find AuthData by authToken
+Database --> AuthDAO: AuthData or null
+AuthDAO --> UserService: AuthData or null
+
+break The authToken is missing or invalid
+UserService --> Server: UnauthorizedException
+Server --> Client: 401\n{"message":"Error: unauthorized"}
+end
+
+UserService -> AuthDAO: deleteAuth(authToken)
+AuthDAO -> Database: delete AuthData by authToken
+Database --> AuthDAO: success
+AuthDAO --> UserService: success
+
+UserService --> UserHandler: LogoutResult()
+UserHandler -> UserHandler: serialize LogoutResult
+UserHandler --> Server: responseBody
+Server --> Client: 200\n{}
+
+note over Server,Database: A failed DAO operation throws DataAccessException.\nThe server returns 500 with an error message.
 end
 
 group#red #pink List Games
