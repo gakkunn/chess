@@ -53,7 +53,40 @@ note over Server,Database: A failed DAO operation throws DataAccessException.\nT
 end
 
 group#orange #FCEDCA Login
+note over UserHandler,AuthDAO: LoginRequest(username, password)\nLoginResult(username, authToken)\nUserData(username, password, email)\nAuthData(authToken, username)
 Client -> Server: [POST] /session\n{"username":"", "password":""}
+Server -> UserHandler: handleLogin(requestBody)
+UserHandler -> UserHandler: deserialize LoginRequest
+UserHandler -> UserService: login(LoginRequest)
+
+break A required field is missing
+UserService --> Server: BadRequestException
+Server --> Client: 400\n{"message":"Error: bad request"}
+end
+
+UserService -> UserDAO: getUser(username)
+UserDAO -> Database: find UserData by username
+Database --> UserDAO: UserData or null
+UserDAO --> UserService: UserData or null
+UserService -> UserService: compare the submitted and stored passwords
+
+break The user does not exist or the password does not match
+UserService --> Server: UnauthorizedException
+Server --> Client: 401\n{"message":"Error: unauthorized"}
+end
+
+UserService -> UserService: generate a new unique authToken
+UserService -> AuthDAO: createAuth(AuthData)
+AuthDAO -> Database: insert AuthData
+Database --> AuthDAO: success
+AuthDAO --> UserService: success
+
+UserService --> UserHandler: LoginResult(username, authToken)
+UserHandler -> UserHandler: serialize LoginResult
+UserHandler --> Server: responseBody
+Server --> Client: 200\n{"username":"", "authToken":""}
+
+note over Server,Database: A failed DAO operation throws DataAccessException.\nThe server returns 500 with an error message.
 end
 
 group#green #lightgreen Logout
