@@ -4,8 +4,10 @@ actor Client
 participant Server
 participant UserHandler
 participant GameHandler
+participant ClearHandler
 participant UserService
 participant GameService
+participant ClearService
 participant UserDAO
 participant AuthDAO
 participant GameDAO
@@ -246,5 +248,31 @@ note over Server,Database: A failed DAO operation throws DataAccessException.\nT
 end
 
 group#gray #lightgray Clear Application
+note over ClearHandler,GameDAO: ClearRequest()\nClearResult()
 Client -> Server: [DELETE] /db
+Server -> ClearHandler: handleClear()
+ClearHandler -> ClearService: clear(ClearRequest)
+
+ClearService -> AuthDAO: clear()
+AuthDAO -> Database: delete all AuthData records
+Database --> AuthDAO: success
+AuthDAO --> ClearService: success
+
+ClearService -> GameDAO: clear()
+GameDAO -> Database: delete all GameData records
+Database --> GameDAO: success
+GameDAO --> ClearService: success
+
+ClearService -> UserDAO: clear()
+UserDAO -> Database: delete all UserData records
+Database --> UserDAO: success
+UserDAO --> ClearService: success
+
+ClearService --> ClearHandler: ClearResult()
+ClearHandler -> ClearHandler: serialize ClearResult
+ClearHandler --> Server: responseBody
+Server --> Client: 200\n{}
+
+note over Client,ClearService: Clear Application requires no request body or authToken.
+note over ClearService,Database: AuthData is deleted before GameData and UserData.\nA failed DAO operation throws DataAccessException.\nThe server returns 500 with an error message.
 end
