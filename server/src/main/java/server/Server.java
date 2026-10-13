@@ -34,6 +34,7 @@ public class Server {
 
         javalin.delete("/db", clearHandler::handleClear);
         javalin.post("/user", userHandler::handleRegister);
+        javalin.post("/session", userHandler::handleLogin);
         HttpErrorHandler.register(javalin, serializer);
     }
 

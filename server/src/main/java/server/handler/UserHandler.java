@@ -6,7 +6,10 @@ import io.javalin.http.Context;
 import service.UserService;
 import service.exception.AlreadyTakenException;
 import service.exception.BadRequestException;
+import service.exception.UnauthorizedException;
+import service.request.LoginRequest;
 import service.request.RegisterRequest;
+import service.result.LoginResult;
 import service.result.RegisterResult;
 
 /**
@@ -26,6 +29,16 @@ public class UserHandler {
             throws BadRequestException, AlreadyTakenException, DataAccessException {
         RegisterRequest request = serializer.fromJson(context.body(), RegisterRequest.class);
         RegisterResult result = userService.register(request);
+
+        context.status(200);
+        context.contentType("application/json");
+        context.result(serializer.toJson(result));
+    }
+
+    public void handleLogin(Context context)
+            throws BadRequestException, UnauthorizedException, DataAccessException {
+        LoginRequest request = serializer.fromJson(context.body(), LoginRequest.class);
+        LoginResult result = userService.login(request);
 
         context.status(200);
         context.contentType("application/json");

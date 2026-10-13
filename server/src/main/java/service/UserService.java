@@ -7,9 +7,13 @@ import model.AuthData;
 import model.UserData;
 import service.exception.AlreadyTakenException;
 import service.exception.BadRequestException;
+import service.exception.UnauthorizedException;
+import service.request.LoginRequest;
 import service.request.RegisterRequest;
+import service.result.LoginResult;
 import service.result.RegisterResult;
 
+import java.util.Objects;
 import java.util.UUID;
 
 /**
@@ -48,11 +52,40 @@ public class UserService {
         return new RegisterResult(request.username(), authToken);
     }
 
+    /**
+     * Verifies a user's credentials and creates a new authenticated session.
+     */
+    public LoginResult login(LoginRequest request)
+            throws BadRequestException, UnauthorizedException, DataAccessException {
+        validateLoginRequest(request);
+
+        UserData userData = userDAO.getUser(request.username());
+        boolean passwordMatches = userData != null
+                && Objects.equals(userData.password(), request.password());
+
+        if (!passwordMatches) {
+            throw new UnauthorizedException();
+        }
+
+        String authToken = generateUniqueAuthToken();
+        authDAO.createAuth(new AuthData(authToken, request.username()));
+
+        return new LoginResult(request.username(), authToken);
+    }
+
     private void validateRegisterRequest(RegisterRequest request) throws BadRequestException {
         if (request == null
                 || isMissing(request.username())
                 || isMissing(request.password())
                 || isMissing(request.email())) {
+            throw new BadRequestException();
+        }
+    }
+
+    private void validateLoginRequest(LoginRequest request) throws BadRequestException {
+        if (request == null
+                || isMissing(request.username())
+                || isMissing(request.password())) {
             throw new BadRequestException();
         }
     }
