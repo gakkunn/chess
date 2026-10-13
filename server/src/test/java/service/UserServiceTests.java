@@ -14,9 +14,12 @@ import service.exception.AlreadyTakenException;
 import service.exception.BadRequestException;
 import service.exception.UnauthorizedException;
 import service.request.LoginRequest;
+import service.request.LogoutRequest;
 import service.request.RegisterRequest;
 import service.result.LoginResult;
+import service.result.LogoutResult;
 import service.result.RegisterResult;
+import testutil.FailingAuthDAO;
 import testutil.FailingUserDAO;
 
 public class UserServiceTests {
@@ -239,5 +242,72 @@ public class UserServiceTests {
                 () -> failingService.login(request));
 
         Assertions.assertEquals("User storage is unavailable", exception.getMessage());
+    }
+
+    @Test
+    public void logoutRemovesOnlyTheRequestedSession()
+            throws DataAccessException, UnauthorizedException {
+        AuthData requestedSession = new AuthData("requested-token", "reader");
+        AuthData otherSession = new AuthData("other-token", "reader");
+        authDAO.createAuth(requestedSession);
+        authDAO.createAuth(otherSession);
+
+        LogoutResult result = userService.logout(new LogoutRequest("requested-token"));
+
+        Assertions.assertEquals(new LogoutResult(), result);
+        Assertions.assertNull(authDAO.getAuth("requested-token"));
+        Assertions.assertEquals(otherSession, authDAO.getAuth("other-token"));
+    }
+
+    @Test
+    public void logoutRejectsMissingAuthToken() {
+        LogoutRequest[] invalidRequests = {
+                null,
+                new LogoutRequest(null),
+                new LogoutRequest("   ")
+        };
+
+        for (LogoutRequest request : invalidRequests) {
+            Assertions.assertThrows(
+                    UnauthorizedException.class,
+                    () -> userService.logout(request));
+        }
+    }
+
+    @Test
+    public void logoutRejectsUnknownAuthToken() {
+        LogoutRequest request = new LogoutRequest("unknown-token");
+
+        Assertions.assertThrows(
+                UnauthorizedException.class,
+                () -> userService.logout(request));
+    }
+
+    @Test
+    public void logoutRejectsAlreadyDeletedSession()
+            throws DataAccessException, UnauthorizedException {
+        AuthData session = new AuthData("single-use-token", "reader");
+        LogoutRequest request = new LogoutRequest(session.authToken());
+        authDAO.createAuth(session);
+
+        userService.logout(request);
+
+        Assertions.assertThrows(
+                UnauthorizedException.class,
+                () -> userService.logout(request));
+    }
+
+    @Test
+    public void logoutPropagatesDataAccessFailure() {
+        UserService failingService = new UserService(
+                new MemoryUserDAO(),
+                new FailingAuthDAO());
+        LogoutRequest request = new LogoutRequest("valid-looking-token");
+
+        DataAccessException exception = Assertions.assertThrows(
+                DataAccessException.class,
+                () -> failingService.logout(request));
+
+        Assertions.assertEquals("Authentication storage is unavailable", exception.getMessage());
     }
 }

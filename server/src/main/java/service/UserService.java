@@ -9,8 +9,10 @@ import service.exception.AlreadyTakenException;
 import service.exception.BadRequestException;
 import service.exception.UnauthorizedException;
 import service.request.LoginRequest;
+import service.request.LogoutRequest;
 import service.request.RegisterRequest;
 import service.result.LoginResult;
+import service.result.LogoutResult;
 import service.result.RegisterResult;
 
 import java.util.Objects;
@@ -73,6 +75,21 @@ public class UserService {
         return new LoginResult(request.username(), authToken);
     }
 
+    /**
+     * Ends the authenticated session identified by the request's token.
+     */
+    public LogoutResult logout(LogoutRequest request)
+            throws UnauthorizedException, DataAccessException {
+        String authToken = requireAuthToken(request);
+
+        if (authDAO.getAuth(authToken) == null) {
+            throw new UnauthorizedException();
+        }
+
+        authDAO.deleteAuth(authToken);
+        return new LogoutResult();
+    }
+
     private void validateRegisterRequest(RegisterRequest request) throws BadRequestException {
         if (request == null
                 || isMissing(request.username())
@@ -88,6 +105,14 @@ public class UserService {
                 || isMissing(request.password())) {
             throw new BadRequestException();
         }
+    }
+
+    private String requireAuthToken(LogoutRequest request) throws UnauthorizedException {
+        if (request == null || isMissing(request.authToken())) {
+            throw new UnauthorizedException();
+        }
+
+        return request.authToken();
     }
 
     private boolean isMissing(String value) {

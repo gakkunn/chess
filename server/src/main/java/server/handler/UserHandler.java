@@ -8,8 +8,10 @@ import service.exception.AlreadyTakenException;
 import service.exception.BadRequestException;
 import service.exception.UnauthorizedException;
 import service.request.LoginRequest;
+import service.request.LogoutRequest;
 import service.request.RegisterRequest;
 import service.result.LoginResult;
+import service.result.LogoutResult;
 import service.result.RegisterResult;
 
 /**
@@ -39,6 +41,16 @@ public class UserHandler {
             throws BadRequestException, UnauthorizedException, DataAccessException {
         LoginRequest request = serializer.fromJson(context.body(), LoginRequest.class);
         LoginResult result = userService.login(request);
+
+        context.status(200);
+        context.contentType("application/json");
+        context.result(serializer.toJson(result));
+    }
+
+    public void handleLogout(Context context)
+            throws UnauthorizedException, DataAccessException {
+        LogoutRequest request = new LogoutRequest(context.header("authorization"));
+        LogoutResult result = userService.logout(request);
 
         context.status(200);
         context.contentType("application/json");
