@@ -14,9 +14,14 @@ import org.junit.jupiter.api.Test;
 import service.exception.BadRequestException;
 import service.exception.UnauthorizedException;
 import service.request.CreateGameRequest;
+import service.request.ListGamesRequest;
 import service.result.CreateGameResult;
+import service.result.GameSummary;
+import service.result.ListGamesResult;
 import testutil.FailingAuthDAO;
 import testutil.FailingGameDAO;
+
+import java.util.List;
 
 public class GameServiceTests {
 
@@ -118,6 +123,95 @@ public class GameServiceTests {
         DataAccessException exception = Assertions.assertThrows(
                 DataAccessException.class,
                 () -> failingService.createGame(request));
+
+        Assertions.assertEquals("Game storage is unavailable", exception.getMessage());
+    }
+
+    @Test
+    public void listGamesReturnsEmptyListWhenNoGamesExist()
+            throws DataAccessException, UnauthorizedException {
+        addAuthenticatedSession();
+
+        ListGamesResult result = gameService.listGames(
+                new ListGamesRequest("valid-token"));
+
+        Assertions.assertNotNull(result.games());
+        Assertions.assertTrue(result.games().isEmpty());
+    }
+
+    @Test
+    public void listGamesReturnsPublicGameSummariesInStorageOrder()
+            throws DataAccessException, UnauthorizedException {
+        addAuthenticatedSession();
+        int firstGameID = gameDAO.createGame(new GameData(
+                0,
+                "white-player",
+                null,
+                "First Game",
+                new ChessGame()));
+        int secondGameID = gameDAO.createGame(new GameData(
+                0,
+                null,
+                "black-player",
+                "Second Game",
+                new ChessGame()));
+
+        ListGamesResult result = gameService.listGames(
+                new ListGamesRequest("valid-token"));
+
+        List<GameSummary> expectedGames = List.of(
+                new GameSummary(firstGameID, "white-player", null, "First Game"),
+                new GameSummary(secondGameID, null, "black-player", "Second Game"));
+        Assertions.assertEquals(expectedGames, result.games());
+    }
+
+    @Test
+    public void listGamesRejectsMissingAuthToken() {
+        ListGamesRequest[] unauthorizedRequests = {
+                null,
+                new ListGamesRequest(null),
+                new ListGamesRequest("   ")
+        };
+
+        for (ListGamesRequest request : unauthorizedRequests) {
+            Assertions.assertThrows(
+                    UnauthorizedException.class,
+                    () -> gameService.listGames(request));
+        }
+    }
+
+    @Test
+    public void listGamesRejectsUnknownAuthToken() {
+        ListGamesRequest request = new ListGamesRequest("unknown-token");
+
+        Assertions.assertThrows(
+                UnauthorizedException.class,
+                () -> gameService.listGames(request));
+    }
+
+    @Test
+    public void listGamesPropagatesAuthenticationStorageFailure() {
+        GameService failingService = new GameService(
+                new FailingAuthDAO(),
+                new MemoryGameDAO());
+        ListGamesRequest request = new ListGamesRequest("valid-looking-token");
+
+        DataAccessException exception = Assertions.assertThrows(
+                DataAccessException.class,
+                () -> failingService.listGames(request));
+
+        Assertions.assertEquals("Authentication storage is unavailable", exception.getMessage());
+    }
+
+    @Test
+    public void listGamesPropagatesGameStorageFailure() throws DataAccessException {
+        addAuthenticatedSession();
+        GameService failingService = new GameService(authDAO, new FailingGameDAO());
+        ListGamesRequest request = new ListGamesRequest("valid-token");
+
+        DataAccessException exception = Assertions.assertThrows(
+                DataAccessException.class,
+                () -> failingService.listGames(request));
 
         Assertions.assertEquals("Game storage is unavailable", exception.getMessage());
     }

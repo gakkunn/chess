@@ -7,7 +7,9 @@ import service.GameService;
 import service.exception.BadRequestException;
 import service.exception.UnauthorizedException;
 import service.request.CreateGameRequest;
+import service.request.ListGamesRequest;
 import service.result.CreateGameResult;
+import service.result.ListGamesResult;
 
 /**
  * Translates game HTTP requests into service operations and JSON responses.
@@ -33,6 +35,17 @@ public class GameHandler {
                 gameName);
 
         CreateGameResult result = gameService.createGame(request);
+
+        context.status(200);
+        context.contentType("application/json");
+        context.result(serializer.toJson(result));
+    }
+
+    public void handleListGames(Context context)
+            throws UnauthorizedException, DataAccessException {
+        ListGamesRequest request = new ListGamesRequest(
+                context.header("authorization"));
+        ListGamesResult result = gameService.listGames(request);
 
         context.status(200);
         context.contentType("application/json");
