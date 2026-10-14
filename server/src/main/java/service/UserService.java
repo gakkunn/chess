@@ -32,6 +32,9 @@ public class UserService {
         this(userDAO, authDAO, () -> UUID.randomUUID().toString());
     }
 
+    /**
+     * Creates a service with a caller-provided authentication token generator.
+     */
     UserService(
             UserDAO userDAO,
             AuthDAO authDAO,

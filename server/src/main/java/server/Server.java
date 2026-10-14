@@ -17,6 +17,9 @@ import service.ClearService;
 import service.GameService;
 import service.UserService;
 
+/**
+ * Configures and runs the HTTP API for the chess server.
+ */
 public class Server {
 
     private final Javalin javalin;
@@ -46,11 +49,20 @@ public class Server {
         HttpErrorHandler.register(javalin, serializer);
     }
 
+    /**
+     * Starts the server on the requested port.
+     *
+     * @param desiredPort the port that Javalin should use
+     * @return the port used by the running server
+     */
     public int run(int desiredPort) {
         javalin.start(desiredPort);
         return javalin.port();
     }
 
+    /**
+     * Stops the server and releases its network resources.
+     */
     public void stop() {
         javalin.stop();
     }
