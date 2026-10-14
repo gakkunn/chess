@@ -11,12 +11,15 @@ import model.GameData;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import service.exception.AlreadyTakenException;
 import service.exception.BadRequestException;
 import service.exception.UnauthorizedException;
 import service.request.CreateGameRequest;
+import service.request.JoinGameRequest;
 import service.request.ListGamesRequest;
 import service.result.CreateGameResult;
 import service.result.GameSummary;
+import service.result.JoinGameResult;
 import service.result.ListGamesResult;
 import testutil.FailingAuthDAO;
 import testutil.FailingGameDAO;
@@ -216,7 +219,184 @@ public class GameServiceTests {
         Assertions.assertEquals("Game storage is unavailable", exception.getMessage());
     }
 
+    @Test
+    public void joinGameAssignsAuthenticatedUserToWhiteColor()
+            throws DataAccessException, BadRequestException,
+            UnauthorizedException, AlreadyTakenException {
+        addAuthenticatedSession();
+        int gameID = addOpenGame("White Game");
+        JoinGameRequest request = new JoinGameRequest(
+                "valid-token",
+                ChessGame.TeamColor.WHITE,
+                gameID);
+
+        JoinGameResult result = gameService.joinGame(request);
+        GameData updatedGame = gameDAO.getGame(gameID);
+
+        Assertions.assertEquals(new JoinGameResult(), result);
+        Assertions.assertEquals("reader", updatedGame.whiteUsername());
+        Assertions.assertNull(updatedGame.blackUsername());
+        Assertions.assertEquals("White Game", updatedGame.gameName());
+        Assertions.assertEquals(new ChessGame(), updatedGame.game());
+    }
+
+    @Test
+    public void joinGameAssignsAuthenticatedUserToBlackColor()
+            throws DataAccessException, BadRequestException,
+            UnauthorizedException, AlreadyTakenException {
+        addAuthenticatedSession();
+        int gameID = addOpenGame("Black Game");
+        JoinGameRequest request = new JoinGameRequest(
+                "valid-token",
+                ChessGame.TeamColor.BLACK,
+                gameID);
+
+        gameService.joinGame(request);
+        GameData updatedGame = gameDAO.getGame(gameID);
+
+        Assertions.assertNull(updatedGame.whiteUsername());
+        Assertions.assertEquals("reader", updatedGame.blackUsername());
+    }
+
+    @Test
+    public void joinGameAllowsSameUserToClaimBothColors()
+            throws DataAccessException, BadRequestException,
+            UnauthorizedException, AlreadyTakenException {
+        addAuthenticatedSession();
+        int gameID = addOpenGame("Solo Game");
+
+        gameService.joinGame(new JoinGameRequest(
+                "valid-token",
+                ChessGame.TeamColor.WHITE,
+                gameID));
+        gameService.joinGame(new JoinGameRequest(
+                "valid-token",
+                ChessGame.TeamColor.BLACK,
+                gameID));
+
+        GameData updatedGame = gameDAO.getGame(gameID);
+        Assertions.assertEquals("reader", updatedGame.whiteUsername());
+        Assertions.assertEquals("reader", updatedGame.blackUsername());
+    }
+
+    @Test
+    public void joinGameRejectsInvalidRequestFields() throws DataAccessException {
+        addAuthenticatedSession();
+        int gameID = addOpenGame("Validation Game");
+        JoinGameRequest[] invalidRequests = {
+                null,
+                new JoinGameRequest("valid-token", null, gameID),
+                new JoinGameRequest("valid-token", ChessGame.TeamColor.WHITE, null),
+                new JoinGameRequest("valid-token", ChessGame.TeamColor.WHITE, 0),
+                new JoinGameRequest("valid-token", ChessGame.TeamColor.WHITE, -1)
+        };
+
+        for (JoinGameRequest request : invalidRequests) {
+            Assertions.assertThrows(
+                    BadRequestException.class,
+                    () -> gameService.joinGame(request));
+        }
+    }
+
+    @Test
+    public void joinGameRejectsMissingOrUnknownAuthToken() throws DataAccessException {
+        int gameID = addOpenGame("Authentication Game");
+        JoinGameRequest[] unauthorizedRequests = {
+                new JoinGameRequest(null, ChessGame.TeamColor.WHITE, gameID),
+                new JoinGameRequest("   ", ChessGame.TeamColor.WHITE, gameID),
+                new JoinGameRequest("unknown-token", ChessGame.TeamColor.WHITE, gameID)
+        };
+
+        for (JoinGameRequest request : unauthorizedRequests) {
+            Assertions.assertThrows(
+                    UnauthorizedException.class,
+                    () -> gameService.joinGame(request));
+        }
+    }
+
+    @Test
+    public void joinGameRejectsUnknownGameIdentifier() throws DataAccessException {
+        addAuthenticatedSession();
+        JoinGameRequest request = new JoinGameRequest(
+                "valid-token",
+                ChessGame.TeamColor.WHITE,
+                999);
+
+        Assertions.assertThrows(
+                BadRequestException.class,
+                () -> gameService.joinGame(request));
+    }
+
+    @Test
+    public void joinGameRejectsOccupiedColor() throws DataAccessException {
+        addAuthenticatedSession();
+        int gameID = gameDAO.createGame(new GameData(
+                0,
+                "white-player",
+                "black-player",
+                "Full Game",
+                new ChessGame()));
+        JoinGameRequest[] occupiedColorRequests = {
+                new JoinGameRequest(
+                        "valid-token",
+                        ChessGame.TeamColor.WHITE,
+                        gameID),
+                new JoinGameRequest(
+                        "valid-token",
+                        ChessGame.TeamColor.BLACK,
+                        gameID)
+        };
+
+        for (JoinGameRequest request : occupiedColorRequests) {
+            Assertions.assertThrows(
+                    AlreadyTakenException.class,
+                    () -> gameService.joinGame(request));
+        }
+    }
+
+    @Test
+    public void joinGamePropagatesAuthenticationStorageFailure() {
+        GameService failingService = new GameService(
+                new FailingAuthDAO(),
+                new MemoryGameDAO());
+        JoinGameRequest request = new JoinGameRequest(
+                "valid-looking-token",
+                ChessGame.TeamColor.WHITE,
+                1);
+
+        DataAccessException exception = Assertions.assertThrows(
+                DataAccessException.class,
+                () -> failingService.joinGame(request));
+
+        Assertions.assertEquals("Authentication storage is unavailable", exception.getMessage());
+    }
+
+    @Test
+    public void joinGamePropagatesGameStorageFailure() throws DataAccessException {
+        addAuthenticatedSession();
+        GameService failingService = new GameService(authDAO, new FailingGameDAO());
+        JoinGameRequest request = new JoinGameRequest(
+                "valid-token",
+                ChessGame.TeamColor.WHITE,
+                1);
+
+        DataAccessException exception = Assertions.assertThrows(
+                DataAccessException.class,
+                () -> failingService.joinGame(request));
+
+        Assertions.assertEquals("Game storage is unavailable", exception.getMessage());
+    }
+
     private void addAuthenticatedSession() throws DataAccessException {
         authDAO.createAuth(new AuthData("valid-token", "reader"));
+    }
+
+    private int addOpenGame(String gameName) throws DataAccessException {
+        return gameDAO.createGame(new GameData(
+                0,
+                null,
+                null,
+                gameName,
+                new ChessGame()));
     }
 }

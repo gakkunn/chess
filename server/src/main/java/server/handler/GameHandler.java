@@ -4,11 +4,14 @@ import com.google.gson.Gson;
 import dataaccess.DataAccessException;
 import io.javalin.http.Context;
 import service.GameService;
+import service.exception.AlreadyTakenException;
 import service.exception.BadRequestException;
 import service.exception.UnauthorizedException;
 import service.request.CreateGameRequest;
+import service.request.JoinGameRequest;
 import service.request.ListGamesRequest;
 import service.result.CreateGameResult;
+import service.result.JoinGameResult;
 import service.result.ListGamesResult;
 
 /**
@@ -46,6 +49,24 @@ public class GameHandler {
         ListGamesRequest request = new ListGamesRequest(
                 context.header("authorization"));
         ListGamesResult result = gameService.listGames(request);
+
+        context.status(200);
+        context.contentType("application/json");
+        context.result(serializer.toJson(result));
+    }
+
+    public void handleJoinGame(Context context)
+            throws BadRequestException, UnauthorizedException,
+            AlreadyTakenException, DataAccessException {
+        JoinGameRequest requestBody = serializer.fromJson(
+                context.body(),
+                JoinGameRequest.class);
+        JoinGameRequest request = new JoinGameRequest(
+                context.header("authorization"),
+                requestBody == null ? null : requestBody.playerColor(),
+                requestBody == null ? null : requestBody.gameID());
+
+        JoinGameResult result = gameService.joinGame(request);
 
         context.status(200);
         context.contentType("application/json");

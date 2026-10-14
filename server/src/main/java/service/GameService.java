@@ -4,13 +4,17 @@ import chess.ChessGame;
 import dataaccess.AuthDAO;
 import dataaccess.DataAccessException;
 import dataaccess.GameDAO;
+import model.AuthData;
 import model.GameData;
+import service.exception.AlreadyTakenException;
 import service.exception.BadRequestException;
 import service.exception.UnauthorizedException;
 import service.request.CreateGameRequest;
+import service.request.JoinGameRequest;
 import service.request.ListGamesRequest;
 import service.result.CreateGameResult;
 import service.result.GameSummary;
+import service.result.JoinGameResult;
 import service.result.ListGamesResult;
 
 import java.util.ArrayList;
@@ -74,6 +78,29 @@ public class GameService {
         return new ListGamesResult(gameSummaries);
     }
 
+    /**
+     * Assigns the authenticated user to an available color in a stored game.
+     */
+    public JoinGameResult joinGame(JoinGameRequest request)
+            throws BadRequestException, UnauthorizedException,
+            AlreadyTakenException, DataAccessException {
+        validateJoinGameRequest(request);
+        AuthData authenticatedSession = requireAuthenticatedSession(request.authToken());
+
+        GameData storedGame = gameDAO.getGame(request.gameID());
+        if (storedGame == null) {
+            throw new BadRequestException();
+        }
+
+        GameData updatedGame = assignPlayerToGame(
+                storedGame,
+                request.playerColor(),
+                authenticatedSession.username());
+        gameDAO.updateGame(updatedGame);
+
+        return new JoinGameResult();
+    }
+
     private void validateCreateGameRequest(CreateGameRequest request)
             throws BadRequestException {
         if (request == null || isMissing(request.gameName())) {
@@ -81,11 +108,57 @@ public class GameService {
         }
     }
 
-    private void requireAuthenticatedSession(String authToken)
+    private void validateJoinGameRequest(JoinGameRequest request)
+            throws BadRequestException {
+        if (request == null
+                || request.playerColor() == null
+                || request.gameID() == null
+                || request.gameID() <= 0) {
+            throw new BadRequestException();
+        }
+    }
+
+    private GameData assignPlayerToGame(
+            GameData storedGame,
+            ChessGame.TeamColor playerColor,
+            String username) throws AlreadyTakenException {
+        if (playerColor == ChessGame.TeamColor.WHITE) {
+            if (storedGame.whiteUsername() != null) {
+                throw new AlreadyTakenException();
+            }
+
+            return new GameData(
+                    storedGame.gameID(),
+                    username,
+                    storedGame.blackUsername(),
+                    storedGame.gameName(),
+                    storedGame.game());
+        }
+
+        if (storedGame.blackUsername() != null) {
+            throw new AlreadyTakenException();
+        }
+
+        return new GameData(
+                storedGame.gameID(),
+                storedGame.whiteUsername(),
+                username,
+                storedGame.gameName(),
+                storedGame.game());
+    }
+
+    private AuthData requireAuthenticatedSession(String authToken)
             throws UnauthorizedException, DataAccessException {
-        if (isMissing(authToken) || authDAO.getAuth(authToken) == null) {
+        if (isMissing(authToken)) {
             throw new UnauthorizedException();
         }
+
+        AuthData authenticatedSession = authDAO.getAuth(authToken);
+        if (authenticatedSession == null) {
+            throw new UnauthorizedException();
+        }
+
+        return authenticatedSession;
     }
 
     private boolean isMissing(String value) {

@@ -42,6 +42,7 @@ public class Server {
         javalin.delete("/session", userHandler::handleLogout);
         javalin.post("/game", gameHandler::handleCreateGame);
         javalin.get("/game", gameHandler::handleListGames);
+        javalin.put("/game", gameHandler::handleJoinGame);
         HttpErrorHandler.register(javalin, serializer);
     }
 
