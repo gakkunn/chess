@@ -17,6 +17,8 @@ import org.junit.jupiter.api.Test;
 import service.request.ClearRequest;
 import service.result.ClearResult;
 import testutil.FailingAuthDAO;
+import testutil.FailingGameDAO;
+import testutil.FailingUserDAO;
 
 public class ClearServiceTests {
 
@@ -48,7 +50,7 @@ public class ClearServiceTests {
     }
 
     @Test
-    public void clearPropagatesDataAccessFailure() {
+    public void clearPropagatesAuthenticationStorageFailure() {
         ClearService failingService = new ClearService(
                 new MemoryUserDAO(),
                 new FailingAuthDAO(),
@@ -59,5 +61,33 @@ public class ClearServiceTests {
                 () -> failingService.clear(new ClearRequest()));
 
         Assertions.assertEquals("Authentication storage is unavailable", exception.getMessage());
+    }
+
+    @Test
+    public void clearPropagatesGameStorageFailure() {
+        ClearService failingService = new ClearService(
+                new MemoryUserDAO(),
+                new MemoryAuthDAO(),
+                new FailingGameDAO());
+
+        DataAccessException exception = Assertions.assertThrows(
+                DataAccessException.class,
+                () -> failingService.clear(new ClearRequest()));
+
+        Assertions.assertEquals("Game storage is unavailable", exception.getMessage());
+    }
+
+    @Test
+    public void clearPropagatesUserStorageFailure() {
+        ClearService failingService = new ClearService(
+                new FailingUserDAO(),
+                new MemoryAuthDAO(),
+                new MemoryGameDAO());
+
+        DataAccessException exception = Assertions.assertThrows(
+                DataAccessException.class,
+                () -> failingService.clear(new ClearRequest()));
+
+        Assertions.assertEquals("User storage is unavailable", exception.getMessage());
     }
 }

@@ -22,6 +22,10 @@ import service.result.RegisterResult;
 import testutil.FailingAuthDAO;
 import testutil.FailingUserDAO;
 
+import java.util.ArrayDeque;
+import java.util.Deque;
+import java.util.List;
+
 public class UserServiceTests {
 
     private UserDAO userDAO;
@@ -123,7 +127,7 @@ public class UserServiceTests {
     }
 
     @Test
-    public void registerPropagatesDataAccessFailure() {
+    public void registerPropagatesUserStorageFailure() {
         UserService failingService = new UserService(
                 new FailingUserDAO(),
                 new MemoryAuthDAO());
@@ -137,6 +141,52 @@ public class UserServiceTests {
                 () -> failingService.register(request));
 
         Assertions.assertEquals("User storage is unavailable", exception.getMessage());
+    }
+
+    @Test
+    public void registerPropagatesAuthenticationStorageFailure() {
+        UserService failingService = new UserService(
+                new MemoryUserDAO(),
+                new FailingAuthDAO());
+        RegisterRequest request = new RegisterRequest(
+                "reader",
+                "secret-password",
+                "reader@example.com");
+
+        DataAccessException exception = Assertions.assertThrows(
+                DataAccessException.class,
+                () -> failingService.register(request));
+
+        Assertions.assertEquals(
+                "Authentication storage is unavailable",
+                exception.getMessage());
+    }
+
+    @Test
+    public void registerRetriesWhenGeneratedAuthTokenAlreadyExists()
+            throws DataAccessException, BadRequestException, AlreadyTakenException {
+        AuthData existingSession = new AuthData("duplicate-token", "existing-user");
+        authDAO.createAuth(existingSession);
+        Deque<String> generatedTokens = new ArrayDeque<>(List.of(
+                "duplicate-token",
+                "unique-token"));
+        UserService deterministicService = new UserService(
+                userDAO,
+                authDAO,
+                generatedTokens::removeFirst);
+        RegisterRequest request = new RegisterRequest(
+                "reader",
+                "secret-password",
+                "reader@example.com");
+
+        RegisterResult result = deterministicService.register(request);
+
+        Assertions.assertEquals("unique-token", result.authToken());
+        Assertions.assertEquals(existingSession, authDAO.getAuth("duplicate-token"));
+        Assertions.assertEquals(
+                new AuthData("unique-token", "reader"),
+                authDAO.getAuth("unique-token"));
+        Assertions.assertTrue(generatedTokens.isEmpty());
     }
 
     @Test
@@ -231,7 +281,7 @@ public class UserServiceTests {
     }
 
     @Test
-    public void loginPropagatesDataAccessFailure() {
+    public void loginPropagatesUserStorageFailure() {
         UserService failingService = new UserService(
                 new FailingUserDAO(),
                 new MemoryAuthDAO());
@@ -242,6 +292,27 @@ public class UserServiceTests {
                 () -> failingService.login(request));
 
         Assertions.assertEquals("User storage is unavailable", exception.getMessage());
+    }
+
+    @Test
+    public void loginPropagatesAuthenticationStorageFailure() throws DataAccessException {
+        UserDAO availableUserDAO = new MemoryUserDAO();
+        availableUserDAO.createUser(new UserData(
+                "reader",
+                "secret-password",
+                "reader@example.com"));
+        UserService failingService = new UserService(
+                availableUserDAO,
+                new FailingAuthDAO());
+        LoginRequest request = new LoginRequest("reader", "secret-password");
+
+        DataAccessException exception = Assertions.assertThrows(
+                DataAccessException.class,
+                () -> failingService.login(request));
+
+        Assertions.assertEquals(
+                "Authentication storage is unavailable",
+                exception.getMessage());
     }
 
     @Test

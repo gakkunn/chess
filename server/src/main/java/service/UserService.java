@@ -17,6 +17,7 @@ import service.result.RegisterResult;
 
 import java.util.Objects;
 import java.util.UUID;
+import java.util.function.Supplier;
 
 /**
  * Implements account and session operations for chess users.
@@ -25,10 +26,19 @@ public class UserService {
 
     private final UserDAO userDAO;
     private final AuthDAO authDAO;
+    private final Supplier<String> authTokenGenerator;
 
     public UserService(UserDAO userDAO, AuthDAO authDAO) {
+        this(userDAO, authDAO, () -> UUID.randomUUID().toString());
+    }
+
+    UserService(
+            UserDAO userDAO,
+            AuthDAO authDAO,
+            Supplier<String> authTokenGenerator) {
         this.userDAO = userDAO;
         this.authDAO = authDAO;
+        this.authTokenGenerator = authTokenGenerator;
     }
 
     /**
@@ -123,7 +133,7 @@ public class UserService {
         String authToken;
 
         do {
-            authToken = UUID.randomUUID().toString();
+            authToken = authTokenGenerator.get();
         } while (authDAO.getAuth(authToken) != null);
 
         return authToken;
