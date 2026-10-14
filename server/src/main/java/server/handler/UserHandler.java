@@ -32,9 +32,7 @@ public class UserHandler {
         RegisterRequest request = serializer.fromJson(context.body(), RegisterRequest.class);
         RegisterResult result = userService.register(request);
 
-        context.status(200);
-        context.contentType("application/json");
-        context.result(serializer.toJson(result));
+        JsonResponseWriter.write(context, 200, result, serializer);
     }
 
     public void handleLogin(Context context)
@@ -42,9 +40,7 @@ public class UserHandler {
         LoginRequest request = serializer.fromJson(context.body(), LoginRequest.class);
         LoginResult result = userService.login(request);
 
-        context.status(200);
-        context.contentType("application/json");
-        context.result(serializer.toJson(result));
+        JsonResponseWriter.write(context, 200, result, serializer);
     }
 
     public void handleLogout(Context context)
@@ -52,8 +48,6 @@ public class UserHandler {
         LogoutRequest request = new LogoutRequest(context.header("authorization"));
         LogoutResult result = userService.logout(request);
 
-        context.status(200);
-        context.contentType("application/json");
-        context.result(serializer.toJson(result));
+        JsonResponseWriter.write(context, 200, result, serializer);
     }
 }

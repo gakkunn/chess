@@ -39,9 +39,7 @@ public class GameHandler {
 
         CreateGameResult result = gameService.createGame(request);
 
-        context.status(200);
-        context.contentType("application/json");
-        context.result(serializer.toJson(result));
+        JsonResponseWriter.write(context, 200, result, serializer);
     }
 
     public void handleListGames(Context context)
@@ -50,9 +48,7 @@ public class GameHandler {
                 context.header("authorization"));
         ListGamesResult result = gameService.listGames(request);
 
-        context.status(200);
-        context.contentType("application/json");
-        context.result(serializer.toJson(result));
+        JsonResponseWriter.write(context, 200, result, serializer);
     }
 
     public void handleJoinGame(Context context)
@@ -68,8 +64,6 @@ public class GameHandler {
 
         JoinGameResult result = gameService.joinGame(request);
 
-        context.status(200);
-        context.contentType("application/json");
-        context.result(serializer.toJson(result));
+        JsonResponseWriter.write(context, 200, result, serializer);
     }
 }

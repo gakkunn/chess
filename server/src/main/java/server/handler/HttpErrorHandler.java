@@ -35,7 +35,7 @@ public final class HttpErrorHandler {
                 writeError(context, 500, exception.getMessage(), serializer));
 
         javalin.exception(Exception.class, (exception, context) ->
-                writeError(context, 500, exception.getMessage(), serializer));
+                writeError(context, 500, "Error: internal server error", serializer));
     }
 
     private static void writeError(
@@ -44,10 +44,7 @@ public final class HttpErrorHandler {
             String message,
             Gson serializer) {
         ErrorResult result = new ErrorResult(formatErrorMessage(message));
-
-        context.status(statusCode);
-        context.contentType("application/json");
-        context.result(serializer.toJson(result));
+        JsonResponseWriter.write(context, statusCode, result, serializer);
     }
 
     private static String formatErrorMessage(String message) {

@@ -23,8 +23,6 @@ public class ClearHandler {
     public void handleClear(Context context) throws DataAccessException {
         ClearResult result = clearService.clear(new ClearRequest());
 
-        context.status(200);
-        context.contentType("application/json");
-        context.result(serializer.toJson(result));
+        JsonResponseWriter.write(context, 200, result, serializer);
     }
 }
