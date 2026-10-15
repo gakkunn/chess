@@ -1,14 +1,10 @@
 package server;
 
-import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import dataaccess.MemoryGameDAO;
 import dataaccess.MemoryUserDAO;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
-import service.request.LoginRequest;
-import service.request.RegisterRequest;
 import service.result.ErrorResult;
 import service.result.LoginResult;
 import service.result.RegisterResult;
@@ -16,31 +12,17 @@ import testutil.FailingAuthDAO;
 
 import java.io.IOException;
 import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
-import java.util.ArrayList;
-import java.util.List;
 
-public class LogoutEndpointTests {
-
-    private final List<Server> startedServers = new ArrayList<>();
-    private final HttpClient httpClient = HttpClient.newHttpClient();
-    private final Gson serializer = new Gson();
-
-    @AfterEach
-    public void stopServers() {
-        for (Server server : startedServers) {
-            server.stop();
-        }
-
-        httpClient.close();
-    }
+public class LogoutEndpointTests extends EndpointTestSupport {
 
     @Test
     public void logoutReturnsEmptySuccessResponse() throws IOException, InterruptedException {
         URI serverUri = startServer(new Server());
-        RegisterResult registeredUser = registerUser(serverUri);
+        RegisterResult registeredUser = registerSuccessfully(
+                serverUri,
+                "reader",
+                "reader@example.com");
 
         HttpResponse<String> response = logout(serverUri, registeredUser.authToken());
         JsonObject responseBody = serializer.fromJson(response.body(), JsonObject.class);
@@ -52,7 +34,10 @@ public class LogoutEndpointTests {
     @Test
     public void logoutInvalidatesAuthToken() throws IOException, InterruptedException {
         URI serverUri = startServer(new Server());
-        RegisterResult registeredUser = registerUser(serverUri);
+        RegisterResult registeredUser = registerSuccessfully(
+                serverUri,
+                "reader",
+                "reader@example.com");
 
         HttpResponse<String> firstResponse = logout(serverUri, registeredUser.authToken());
         HttpResponse<String> secondResponse = logout(serverUri, registeredUser.authToken());
@@ -88,8 +73,11 @@ public class LogoutEndpointTests {
     @Test
     public void logoutOnlyRemovesRequestedSession() throws IOException, InterruptedException {
         URI serverUri = startServer(new Server());
-        RegisterResult registeredUser = registerUser(serverUri);
-        LoginResult loggedInUser = loginUser(serverUri);
+        RegisterResult registeredUser = registerSuccessfully(
+                serverUri,
+                "reader",
+                "reader@example.com");
+        LoginResult loggedInUser = loginSuccessfully(serverUri, "reader");
 
         HttpResponse<String> firstResponse = logout(serverUri, registeredUser.authToken());
         HttpResponse<String> secondResponse = logout(serverUri, loggedInUser.authToken());
@@ -114,56 +102,12 @@ public class LogoutEndpointTests {
         Assertions.assertEquals("Error: Authentication storage is unavailable", result.message());
     }
 
-    private URI startServer(Server server) {
-        int port = server.run(0);
-        startedServers.add(server);
-        return URI.create("http://localhost:" + port + "/");
-    }
-
-    private RegisterResult registerUser(URI serverUri) throws IOException, InterruptedException {
-        RegisterRequest request = new RegisterRequest(
-                "reader",
-                "secret-password",
-                "reader@example.com");
-        HttpResponse<String> response = post(
-                serverUri.resolve("user"),
-                serializer.toJson(request));
-
-        Assertions.assertEquals(200, response.statusCode());
-        return serializer.fromJson(response.body(), RegisterResult.class);
-    }
-
-    private LoginResult loginUser(URI serverUri) throws IOException, InterruptedException {
-        LoginRequest request = new LoginRequest("reader", "secret-password");
-        HttpResponse<String> response = post(
-                serverUri.resolve("session"),
-                serializer.toJson(request));
-
-        Assertions.assertEquals(200, response.statusCode());
-        return serializer.fromJson(response.body(), LoginResult.class);
-    }
-
     private HttpResponse<String> logout(URI serverUri, String authToken)
             throws IOException, InterruptedException {
-        HttpRequest.Builder requestBuilder = HttpRequest.newBuilder(serverUri.resolve("session"))
-                .DELETE();
-
-        if (authToken != null) {
-            requestBuilder.header("authorization", authToken);
-        }
-
-        return httpClient.send(
-                requestBuilder.build(),
-                HttpResponse.BodyHandlers.ofString());
-    }
-
-    private HttpResponse<String> post(URI endpoint, String requestBody)
-            throws IOException, InterruptedException {
-        HttpRequest request = HttpRequest.newBuilder(endpoint)
-                .header("Content-Type", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString(requestBody))
-                .build();
-
-        return httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+        return sendRequest(
+                serverUri.resolve("session"),
+                "DELETE",
+                null,
+                authToken);
     }
 }

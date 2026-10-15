@@ -1,9 +1,7 @@
 package server;
 
-import com.google.gson.Gson;
 import dataaccess.MemoryGameDAO;
 import dataaccess.MemoryUserDAO;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import service.result.ErrorResult;
@@ -11,32 +9,15 @@ import testutil.FailingAuthDAO;
 
 import java.io.IOException;
 import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
-import java.util.ArrayList;
-import java.util.List;
 
-public class ClearEndpointTests {
-
-    private final List<Server> startedServers = new ArrayList<>();
-    private final HttpClient httpClient = HttpClient.newHttpClient();
-    private final Gson serializer = new Gson();
-
-    @AfterEach
-    public void stopServers() {
-        for (Server server : startedServers) {
-            server.stop();
-        }
-
-        httpClient.close();
-    }
+public class ClearEndpointTests extends EndpointTestSupport {
 
     @Test
     public void deleteDatabaseReturnsEmptySuccessResponse() throws IOException, InterruptedException {
-        URI endpoint = startServer(new Server());
+        URI endpoint = startServer(new Server()).resolve("db");
 
-        HttpResponse<String> response = delete(endpoint);
+        HttpResponse<String> response = sendRequest(endpoint, "DELETE", null, null);
 
         Assertions.assertEquals(200, response.statusCode());
         Assertions.assertEquals("{}", response.body());
@@ -48,10 +29,10 @@ public class ClearEndpointTests {
 
     @Test
     public void deleteDatabaseCanRunMoreThanOnce() throws IOException, InterruptedException {
-        URI endpoint = startServer(new Server());
+        URI endpoint = startServer(new Server()).resolve("db");
 
-        HttpResponse<String> firstResponse = delete(endpoint);
-        HttpResponse<String> secondResponse = delete(endpoint);
+        HttpResponse<String> firstResponse = sendRequest(endpoint, "DELETE", null, null);
+        HttpResponse<String> secondResponse = sendRequest(endpoint, "DELETE", null, null);
 
         Assertions.assertEquals(200, firstResponse.statusCode());
         Assertions.assertEquals(200, secondResponse.statusCode());
@@ -64,9 +45,9 @@ public class ClearEndpointTests {
                 new MemoryUserDAO(),
                 new FailingAuthDAO(),
                 new MemoryGameDAO());
-        URI endpoint = startServer(server);
+        URI endpoint = startServer(server).resolve("db");
 
-        HttpResponse<String> response = delete(endpoint);
+        HttpResponse<String> response = sendRequest(endpoint, "DELETE", null, null);
         ErrorResult errorResult = serializer.fromJson(response.body(), ErrorResult.class);
 
         Assertions.assertEquals(500, response.statusCode());
@@ -75,17 +56,4 @@ public class ClearEndpointTests {
         Assertions.assertTrue(errorResult.message().contains("Authentication storage is unavailable"));
     }
 
-    private URI startServer(Server server) {
-        int port = server.run(0);
-        startedServers.add(server);
-        return URI.create("http://localhost:" + port + "/db");
-    }
-
-    private HttpResponse<String> delete(URI endpoint) throws IOException, InterruptedException {
-        HttpRequest request = HttpRequest.newBuilder(endpoint)
-                .DELETE()
-                .build();
-
-        return httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-    }
 }

@@ -1,19 +1,14 @@
 package server;
 
 import chess.ChessGame;
-import com.google.gson.Gson;
-import com.google.gson.JsonObject;
 import dataaccess.MemoryAuthDAO;
 import dataaccess.MemoryGameDAO;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import service.request.CreateGameRequest;
 import service.request.JoinGameRequest;
-import service.request.LoginRequest;
 import service.request.RegisterRequest;
 import service.result.CreateGameResult;
-import service.result.ErrorResult;
 import service.result.GameSummary;
 import service.result.ListGamesResult;
 import service.result.LoginResult;
@@ -22,28 +17,10 @@ import testutil.UnexpectedFailureUserDAO;
 
 import java.io.IOException;
 import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
-import java.util.ArrayList;
 import java.util.List;
 
-public class ServerIntegrationTests {
-
-    private static final String JSON_CONTENT_TYPE = "application/json";
-
-    private final List<Server> startedServers = new ArrayList<>();
-    private final HttpClient httpClient = HttpClient.newHttpClient();
-    private final Gson serializer = new Gson();
-
-    @AfterEach
-    public void stopServers() {
-        for (Server server : startedServers) {
-            server.stop();
-        }
-
-        httpClient.close();
-    }
+public class ServerIntegrationTests extends EndpointTestSupport {
 
     @Test
     public void completeWorkflowKeepsIndependentSessionsAndClearsApplication()
@@ -76,7 +53,7 @@ public class ServerIntegrationTests {
         assertSuccessfulEmptyResponse(whiteJoinResponse);
         assertSuccessfulEmptyResponse(blackJoinResponse);
 
-        HttpResponse<String> listResponse = listGames(serverUri, ownerLogin.authToken());
+        HttpResponse<String> listResponse = requestGames(serverUri, ownerLogin.authToken());
         ListGamesResult listResult = serializer.fromJson(
                 listResponse.body(),
                 ListGamesResult.class);
@@ -98,7 +75,7 @@ public class ServerIntegrationTests {
                 "authorization");
         assertSuccessfulEmptyResponse(logoutResponse);
 
-        HttpResponse<String> loggedOutSessionResponse = listGames(
+        HttpResponse<String> loggedOutSessionResponse = requestGames(
                 serverUri,
                 ownerLogin.authToken());
         assertErrorResponse(
@@ -106,7 +83,7 @@ public class ServerIntegrationTests {
                 401,
                 "Error: unauthorized");
 
-        HttpResponse<String> independentSessionResponse = listGames(
+        HttpResponse<String> independentSessionResponse = requestGames(
                 serverUri,
                 owner.authToken());
         Assertions.assertEquals(200, independentSessionResponse.statusCode());
@@ -119,7 +96,7 @@ public class ServerIntegrationTests {
                 null);
         assertSuccessfulEmptyResponse(clearResponse);
 
-        HttpResponse<String> clearedSessionResponse = listGames(
+        HttpResponse<String> clearedSessionResponse = requestGames(
                 serverUri,
                 owner.authToken());
         assertErrorResponse(
@@ -273,64 +250,6 @@ public class ServerIntegrationTests {
         Assertions.assertFalse(response.body().contains("Sensitive internal detail"));
     }
 
-    private URI startServer(Server server) {
-        int port = server.run(0);
-        startedServers.add(server);
-        return URI.create("http://localhost:" + port + "/");
-    }
-
-    private RegisterResult registerSuccessfully(
-            URI serverUri,
-            String username,
-            String email) throws IOException, InterruptedException {
-        RegisterRequest request = new RegisterRequest(
-                username,
-                "secret-password",
-                email);
-        HttpResponse<String> response = sendRequest(
-                serverUri.resolve("user"),
-                "POST",
-                serializer.toJson(request),
-                null,
-                null);
-
-        Assertions.assertEquals(200, response.statusCode());
-        assertJsonContentType(response);
-        return serializer.fromJson(response.body(), RegisterResult.class);
-    }
-
-    private LoginResult loginSuccessfully(URI serverUri, String username)
-            throws IOException, InterruptedException {
-        LoginRequest request = new LoginRequest(username, "secret-password");
-        HttpResponse<String> response = sendRequest(
-                serverUri.resolve("session"),
-                "POST",
-                serializer.toJson(request),
-                null,
-                null);
-
-        Assertions.assertEquals(200, response.statusCode());
-        assertJsonContentType(response);
-        return serializer.fromJson(response.body(), LoginResult.class);
-    }
-
-    private CreateGameResult createGameSuccessfully(
-            URI serverUri,
-            String authToken,
-            String gameName) throws IOException, InterruptedException {
-        CreateGameRequest request = new CreateGameRequest(null, gameName);
-        HttpResponse<String> response = sendRequest(
-                serverUri.resolve("game"),
-                "POST",
-                serializer.toJson(request),
-                authToken,
-                "authorization");
-
-        Assertions.assertEquals(200, response.statusCode());
-        assertJsonContentType(response);
-        return serializer.fromJson(response.body(), CreateGameResult.class);
-    }
-
     private HttpResponse<String> joinGame(
             URI serverUri,
             String authToken,
@@ -343,66 +262,5 @@ public class ServerIntegrationTests {
                 serializer.toJson(request),
                 authToken,
                 "authorization");
-    }
-
-    private HttpResponse<String> listGames(URI serverUri, String authToken)
-            throws IOException, InterruptedException {
-        return sendRequest(
-                serverUri.resolve("game"),
-                "GET",
-                null,
-                authToken,
-                "authorization");
-    }
-
-    private HttpResponse<String> sendRequest(
-            URI endpoint,
-            String method,
-            String requestBody,
-            String authToken,
-            String authHeaderName) throws IOException, InterruptedException {
-        HttpRequest.BodyPublisher bodyPublisher = requestBody == null
-                ? HttpRequest.BodyPublishers.noBody()
-                : HttpRequest.BodyPublishers.ofString(requestBody);
-        HttpRequest.Builder requestBuilder = HttpRequest.newBuilder(endpoint)
-                .method(method, bodyPublisher);
-
-        if (requestBody != null) {
-            requestBuilder.header("Content-Type", JSON_CONTENT_TYPE);
-        }
-
-        if (authToken != null) {
-            requestBuilder.header(authHeaderName, authToken);
-        }
-
-        return httpClient.send(
-                requestBuilder.build(),
-                HttpResponse.BodyHandlers.ofString());
-    }
-
-    private void assertSuccessfulEmptyResponse(HttpResponse<String> response) {
-        JsonObject responseBody = serializer.fromJson(response.body(), JsonObject.class);
-
-        Assertions.assertEquals(200, response.statusCode());
-        assertJsonContentType(response);
-        Assertions.assertTrue(responseBody.isEmpty());
-    }
-
-    private void assertErrorResponse(
-            HttpResponse<String> response,
-            int expectedStatus,
-            String expectedMessage) {
-        ErrorResult result = serializer.fromJson(response.body(), ErrorResult.class);
-
-        Assertions.assertEquals(expectedStatus, response.statusCode());
-        assertJsonContentType(response);
-        Assertions.assertEquals(expectedMessage, result.message());
-    }
-
-    private void assertJsonContentType(HttpResponse<String> response) {
-        String contentType = response.headers()
-                .firstValue("Content-Type")
-                .orElse("");
-        Assertions.assertTrue(contentType.startsWith(JSON_CONTENT_TYPE));
     }
 }

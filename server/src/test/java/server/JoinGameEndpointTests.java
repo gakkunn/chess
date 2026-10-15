@@ -1,7 +1,6 @@
 package server;
 
 import chess.ChessGame;
-import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import dataaccess.AuthDAO;
 import dataaccess.DataAccessException;
@@ -9,14 +8,10 @@ import dataaccess.MemoryAuthDAO;
 import dataaccess.MemoryGameDAO;
 import dataaccess.MemoryUserDAO;
 import model.AuthData;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
-import service.request.CreateGameRequest;
 import service.request.JoinGameRequest;
-import service.request.RegisterRequest;
 import service.result.CreateGameResult;
-import service.result.ErrorResult;
 import service.result.ListGamesResult;
 import service.result.RegisterResult;
 import testutil.FailingAuthDAO;
@@ -24,36 +19,19 @@ import testutil.FailingGameDAO;
 
 import java.io.IOException;
 import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
-import java.util.ArrayList;
-import java.util.List;
 
-public class JoinGameEndpointTests {
-
-    private final List<Server> startedServers = new ArrayList<>();
-    private final HttpClient httpClient = HttpClient.newHttpClient();
-    private final Gson serializer = new Gson();
-
-    @AfterEach
-    public void stopServers() {
-        for (Server server : startedServers) {
-            server.stop();
-        }
-
-        httpClient.close();
-    }
+public class JoinGameEndpointTests extends EndpointTestSupport {
 
     @Test
     public void joinGameAssignsAuthenticatedUserToRequestedColor()
             throws IOException, InterruptedException {
         URI serverUri = startServer(new Server());
-        RegisterResult registeredUser = registerUser(
+        RegisterResult registeredUser = registerSuccessfully(
                 serverUri,
                 "reader",
                 "reader@example.com");
-        CreateGameResult createdGame = createGame(
+        CreateGameResult createdGame = createGameSuccessfully(
                 serverUri,
                 registeredUser.authToken(),
                 "Evening Match");
@@ -66,7 +44,9 @@ public class JoinGameEndpointTests {
                         ChessGame.TeamColor.WHITE,
                         createdGame.gameID()));
         JsonObject responseBody = serializer.fromJson(response.body(), JsonObject.class);
-        ListGamesResult listedGames = listGames(serverUri, registeredUser.authToken());
+        ListGamesResult listedGames = listGamesSuccessfully(
+                serverUri,
+                registeredUser.authToken());
 
         Assertions.assertEquals(200, response.statusCode());
         Assertions.assertTrue(responseBody.isEmpty());
@@ -78,11 +58,11 @@ public class JoinGameEndpointTests {
     public void joinGameAllowsSameUserToClaimBothColors()
             throws IOException, InterruptedException {
         URI serverUri = startServer(new Server());
-        RegisterResult registeredUser = registerUser(
+        RegisterResult registeredUser = registerSuccessfully(
                 serverUri,
                 "reader",
                 "reader@example.com");
-        CreateGameResult createdGame = createGame(
+        CreateGameResult createdGame = createGameSuccessfully(
                 serverUri,
                 registeredUser.authToken(),
                 "Solo Match");
@@ -102,7 +82,9 @@ public class JoinGameEndpointTests {
                         ChessGame.TeamColor.BLACK,
                         createdGame.gameID()));
 
-        ListGamesResult listedGames = listGames(serverUri, registeredUser.authToken());
+        ListGamesResult listedGames = listGamesSuccessfully(
+                serverUri,
+                registeredUser.authToken());
         Assertions.assertEquals(200, whiteResponse.statusCode());
         Assertions.assertEquals(200, blackResponse.statusCode());
         Assertions.assertEquals("reader", listedGames.games().getFirst().whiteUsername());
@@ -113,11 +95,11 @@ public class JoinGameEndpointTests {
     public void joinGameRejectsMissingPlayerColor()
             throws IOException, InterruptedException {
         URI serverUri = startServer(new Server());
-        RegisterResult registeredUser = registerUser(
+        RegisterResult registeredUser = registerSuccessfully(
                 serverUri,
                 "reader",
                 "reader@example.com");
-        CreateGameResult createdGame = createGame(
+        CreateGameResult createdGame = createGameSuccessfully(
                 serverUri,
                 registeredUser.authToken(),
                 "Evening Match");
@@ -133,7 +115,7 @@ public class JoinGameEndpointTests {
     public void joinGameRejectsMissingGameIdentifier()
             throws IOException, InterruptedException {
         URI serverUri = startServer(new Server());
-        RegisterResult registeredUser = registerUser(
+        RegisterResult registeredUser = registerSuccessfully(
                 serverUri,
                 "reader",
                 "reader@example.com");
@@ -149,7 +131,7 @@ public class JoinGameEndpointTests {
     public void joinGameRejectsUnknownGameIdentifier()
             throws IOException, InterruptedException {
         URI serverUri = startServer(new Server());
-        RegisterResult registeredUser = registerUser(
+        RegisterResult registeredUser = registerSuccessfully(
                 serverUri,
                 "reader",
                 "reader@example.com");
@@ -177,15 +159,15 @@ public class JoinGameEndpointTests {
     public void joinGameRejectsOccupiedColor()
             throws IOException, InterruptedException {
         URI serverUri = startServer(new Server());
-        RegisterResult firstUser = registerUser(
+        RegisterResult firstUser = registerSuccessfully(
                 serverUri,
                 "first-user",
                 "first@example.com");
-        RegisterResult secondUser = registerUser(
+        RegisterResult secondUser = registerSuccessfully(
                 serverUri,
                 "second-user",
                 "second@example.com");
-        CreateGameResult createdGame = createGame(
+        CreateGameResult createdGame = createGameSuccessfully(
                 serverUri,
                 firstUser.authToken(),
                 "Contested Match");
@@ -239,95 +221,14 @@ public class JoinGameEndpointTests {
         assertErrorResponse(response, 500, "Error: Game storage is unavailable");
     }
 
-    private URI startServer(Server server) {
-        int port = server.run(0);
-        startedServers.add(server);
-        return URI.create("http://localhost:" + port + "/");
-    }
-
-    private RegisterResult registerUser(
-            URI serverUri,
-            String username,
-            String email) throws IOException, InterruptedException {
-        RegisterRequest request = new RegisterRequest(
-                username,
-                "secret-password",
-                email);
-        HttpResponse<String> response = sendJsonRequest(
-                serverUri.resolve("user"),
-                "POST",
-                serializer.toJson(request),
-                null);
-
-        Assertions.assertEquals(200, response.statusCode());
-        return serializer.fromJson(response.body(), RegisterResult.class);
-    }
-
-    private CreateGameResult createGame(
-            URI serverUri,
-            String authToken,
-            String gameName) throws IOException, InterruptedException {
-        CreateGameRequest request = new CreateGameRequest(null, gameName);
-        HttpResponse<String> response = sendJsonRequest(
-                serverUri.resolve("game"),
-                "POST",
-                serializer.toJson(request),
-                authToken);
-
-        Assertions.assertEquals(200, response.statusCode());
-        return serializer.fromJson(response.body(), CreateGameResult.class);
-    }
-
     private HttpResponse<String> joinGame(
             URI serverUri,
             String authToken,
             JoinGameRequest request) throws IOException, InterruptedException {
-        return sendJsonRequest(
+        return sendRequest(
                 serverUri.resolve("game"),
                 "PUT",
                 serializer.toJson(request),
                 authToken);
-    }
-
-    private ListGamesResult listGames(URI serverUri, String authToken)
-            throws IOException, InterruptedException {
-        HttpRequest request = HttpRequest.newBuilder(serverUri.resolve("game"))
-                .header("authorization", authToken)
-                .GET()
-                .build();
-        HttpResponse<String> response = httpClient.send(
-                request,
-                HttpResponse.BodyHandlers.ofString());
-
-        Assertions.assertEquals(200, response.statusCode());
-        return serializer.fromJson(response.body(), ListGamesResult.class);
-    }
-
-    private HttpResponse<String> sendJsonRequest(
-            URI endpoint,
-            String method,
-            String requestBody,
-            String authToken) throws IOException, InterruptedException {
-        HttpRequest.Builder requestBuilder = HttpRequest.newBuilder(endpoint)
-                .header("Content-Type", "application/json")
-                .method(method, HttpRequest.BodyPublishers.ofString(requestBody));
-
-        if (authToken != null) {
-            requestBuilder.header("authorization", authToken);
-        }
-
-        return httpClient.send(
-                requestBuilder.build(),
-                HttpResponse.BodyHandlers.ofString());
-    }
-
-    private void assertErrorResponse(
-            HttpResponse<String> response,
-            int expectedStatus,
-            String expectedMessage) {
-        ErrorResult result = serializer.fromJson(response.body(), ErrorResult.class);
-
-        Assertions.assertEquals(expectedStatus, response.statusCode());
-        Assertions.assertEquals(expectedMessage, result.message());
     }
 }
