@@ -4,6 +4,7 @@ import model.UserData;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * Stores registered users in memory for the lifetime of the server process.
@@ -31,6 +32,14 @@ public class MemoryUserDAO implements UserDAO {
     @Override
     public synchronized UserData getUser(String username) {
         return usersByUsername.get(username);
+    }
+
+    @Override
+    public synchronized boolean verifyCredentials(String username, String password) {
+        UserData storedUser = usersByUsername.get(username);
+
+        return storedUser != null
+                && Objects.equals(storedUser.password(), password);
     }
 
     private String requireUsername(UserData userData) throws DataAccessException {

@@ -31,6 +31,43 @@ public class MemoryUserDAOTests {
     }
 
     @Test
+    public void verifyCredentialsAcceptsMatchingPassword() throws DataAccessException {
+        userDAO.createUser(new UserData(
+                "reader",
+                "secret-password",
+                "reader@example.com"));
+
+        boolean credentialsAreValid = userDAO.verifyCredentials(
+                "reader",
+                "secret-password");
+
+        Assertions.assertTrue(credentialsAreValid);
+    }
+
+    @Test
+    public void verifyCredentialsRejectsIncorrectPassword() throws DataAccessException {
+        userDAO.createUser(new UserData(
+                "reader",
+                "secret-password",
+                "reader@example.com"));
+
+        boolean credentialsAreValid = userDAO.verifyCredentials(
+                "reader",
+                "incorrect-password");
+
+        Assertions.assertFalse(credentialsAreValid);
+    }
+
+    @Test
+    public void verifyCredentialsRejectsUnknownUsername() throws DataAccessException {
+        boolean credentialsAreValid = userDAO.verifyCredentials(
+                "missing-user",
+                "secret-password");
+
+        Assertions.assertFalse(credentialsAreValid);
+    }
+
+    @Test
     public void clearRemovesEveryUser() throws DataAccessException {
         userDAO.createUser(new UserData("first-user", "first-password", "first@example.com"));
         userDAO.createUser(new UserData("second-user", "second-password", "second@example.com"));

@@ -15,7 +15,6 @@ import service.result.LoginResult;
 import service.result.LogoutResult;
 import service.result.RegisterResult;
 
-import java.util.Objects;
 import java.util.UUID;
 import java.util.function.Supplier;
 
@@ -74,11 +73,10 @@ public class UserService {
             throws BadRequestException, UnauthorizedException, DataAccessException {
         validateLoginRequest(request);
 
-        UserData userData = userDAO.getUser(request.username());
-        boolean passwordMatches = userData != null
-                && Objects.equals(userData.password(), request.password());
-
-        if (!passwordMatches) {
+        boolean credentialsAreValid = userDAO.verifyCredentials(
+                request.username(),
+                request.password());
+        if (!credentialsAreValid) {
             throw new UnauthorizedException();
         }
 

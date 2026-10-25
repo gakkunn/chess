@@ -21,4 +21,10 @@ public interface UserDAO {
      * Finds a user by username, or returns null when the user does not exist.
      */
     UserData getUser(String username) throws DataAccessException;
+
+    /**
+     * Reports whether the supplied credentials belong to a stored user.
+     */
+    boolean verifyCredentials(String username, String password)
+            throws DataAccessException;
 }

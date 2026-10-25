@@ -24,4 +24,9 @@ public class UnexpectedFailureUserDAO implements UserDAO {
     public UserData getUser(String username) {
         throw new IllegalStateException(INTERNAL_DETAIL);
     }
+
+    @Override
+    public boolean verifyCredentials(String username, String password) {
+        throw new IllegalStateException(INTERNAL_DETAIL);
+    }
 }

@@ -26,4 +26,10 @@ public class FailingUserDAO implements UserDAO {
     public UserData getUser(String username) throws DataAccessException {
         throw failure;
     }
+
+    @Override
+    public boolean verifyCredentials(String username, String password)
+            throws DataAccessException {
+        throw failure;
+    }
 }
