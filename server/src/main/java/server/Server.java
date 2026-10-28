@@ -3,11 +3,13 @@ package server;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import dataaccess.AuthDAO;
+import dataaccess.DataAccessException;
 import dataaccess.GameDAO;
-import dataaccess.MemoryAuthDAO;
-import dataaccess.MemoryGameDAO;
-import dataaccess.MemoryUserDAO;
 import dataaccess.UserDAO;
+import dataaccess.sql.SQLAuthDAO;
+import dataaccess.sql.SQLDatabaseInitializer;
+import dataaccess.sql.SQLGameDAO;
+import dataaccess.sql.SQLUserDAO;
 import io.javalin.Javalin;
 import server.handler.ClearHandler;
 import server.handler.GameHandler;
@@ -25,7 +27,8 @@ public class Server {
     private final Javalin javalin;
 
     public Server() {
-        this(new MemoryUserDAO(), new MemoryAuthDAO(), new MemoryGameDAO());
+        this(new SQLUserDAO(), new SQLAuthDAO(), new SQLGameDAO());
+        initializeDatabase();
     }
 
     public Server(UserDAO userDAO, AuthDAO authDAO, GameDAO gameDAO) {
@@ -47,6 +50,16 @@ public class Server {
         javalin.get("/game", gameHandler::handleListGames);
         javalin.put("/game", gameHandler::handleJoinGame);
         HttpErrorHandler.register(javalin, serializer);
+    }
+
+    private void initializeDatabase() {
+        try {
+            SQLDatabaseInitializer.initialize();
+        } catch (DataAccessException exception) {
+            throw new IllegalStateException(
+                    "Unable to initialize the chess database",
+                    exception);
+        }
     }
 
     /**

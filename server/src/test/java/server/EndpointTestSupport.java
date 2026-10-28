@@ -2,8 +2,14 @@ package server;
 
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
+import dataaccess.DataAccessException;
+import dataaccess.sql.SQLAuthDAO;
+import dataaccess.sql.SQLDatabaseInitializer;
+import dataaccess.sql.SQLGameDAO;
+import dataaccess.sql.SQLUserDAO;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
 import service.request.CreateGameRequest;
 import service.request.LoginRequest;
 import service.request.RegisterRequest;
@@ -34,6 +40,14 @@ abstract class EndpointTestSupport {
     private final List<Server> startedServers = new ArrayList<>();
     private final HttpClient httpClient = HttpClient.newHttpClient();
 
+    @BeforeEach
+    public void resetPersistentDatabase() throws DataAccessException {
+        SQLDatabaseInitializer.initialize();
+        new SQLAuthDAO().clear();
+        new SQLGameDAO().clear();
+        new SQLUserDAO().clear();
+    }
+
     @AfterEach
     public void stopServers() {
         for (Server server : startedServers) {
@@ -47,6 +61,11 @@ abstract class EndpointTestSupport {
         int port = server.run(0);
         startedServers.add(server);
         return URI.create("http://localhost:" + port + "/");
+    }
+
+    protected void stopServer(Server server) {
+        server.stop();
+        startedServers.remove(server);
     }
 
     protected HttpResponse<String> sendRequest(
