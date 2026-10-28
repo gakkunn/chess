@@ -8,7 +8,7 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.List;
 
-abstract class SQLDAOTestSupport {
+abstract class SQLDAOTestSupportTests {
 
     private static final List<String> CLEAR_DATABASE_STATEMENTS = List.of(
             "DELETE FROM games",

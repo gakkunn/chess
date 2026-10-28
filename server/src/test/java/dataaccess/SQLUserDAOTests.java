@@ -11,7 +11,7 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
 
-public class SQLUserDAOTests extends SQLDAOTestSupport {
+public class SQLUserDAOTests extends SQLDAOTestSupportTests {
 
     private UserDAO userDAO;
 

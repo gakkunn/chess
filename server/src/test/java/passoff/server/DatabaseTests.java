@@ -95,9 +95,9 @@ public class DatabaseTests {
     @Order(3)
     public void databaseErrorHandling() throws ReflectiveOperationException {
         /*
-        This test simulates an interruption in connecting to MySQL after the server is already running (it started with
-        MySQL working normally). If this happens, this should be considered an "Internal Server Error" and the response
-        code for any endpoint which no longer can do what it needs to do (which for this project should be all of them)
+        This test simulates an interruption in connecting to MySQL after the server is already running (it started with 
+        MySQL working normally). If this happens, this should be considered an "Internal Server Error" and the response 
+        code for any endpoint which no longer can do what it needs to do (which for this project should be all of them) 
         should be 500. The body of each of these responses should include a reasonable, relevant error message.
          */
         Properties fakeDbProperties = new Properties();

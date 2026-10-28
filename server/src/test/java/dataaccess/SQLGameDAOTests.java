@@ -19,7 +19,7 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.List;
 
-public class SQLGameDAOTests extends SQLDAOTestSupport {
+public class SQLGameDAOTests extends SQLDAOTestSupportTests {
 
     private GameDAO gameDAO;
 

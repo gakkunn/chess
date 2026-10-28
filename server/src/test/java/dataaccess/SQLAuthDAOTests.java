@@ -8,7 +8,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-public class SQLAuthDAOTests extends SQLDAOTestSupport {
+public class SQLAuthDAOTests extends SQLDAOTestSupportTests {
 
     private static final UserData STORED_USER = new UserData(
             "reader",
