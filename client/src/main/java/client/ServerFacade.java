@@ -1,5 +1,7 @@
 package client;
 
+import model.AuthData;
+
 public class ServerFacade {
 
     private final HttpCommunicator communicator;
@@ -21,6 +23,21 @@ public class ServerFacade {
                 Void.class);
     }
 
+    public AuthData register(String username, String password, String email)
+            throws ServerFacadeException {
+        RegisterRequest request = new RegisterRequest(
+                username,
+                password,
+                email);
+
+        return communicator.sendRequest(
+                "POST",
+                "/user",
+                request,
+                null,
+                AuthData.class);
+    }
+
     private static String createLocalServerUrl(int port) {
         if (port < 1 || port > 65535) {
             throw new IllegalArgumentException(
@@ -28,5 +45,11 @@ public class ServerFacade {
         }
 
         return "http://localhost:" + port;
+    }
+
+    private record RegisterRequest(
+            String username,
+            String password,
+            String email) {
     }
 }

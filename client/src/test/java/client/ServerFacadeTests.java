@@ -1,5 +1,6 @@
 package client;
 
+import model.AuthData;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
@@ -50,6 +51,36 @@ public class ServerFacadeTests {
         Assertions.assertEquals(
                 "Unable to reach the chess server.",
                 exception.getMessage());
+    }
+
+    @Test
+    void registerCreatesAnAuthenticatedUser() throws ServerFacadeException {
+        String username = "new-player";
+
+        AuthData authData = facade.register(
+                username,
+                "secure-password",
+                "player@example.com");
+
+        Assertions.assertAll(
+                () -> Assertions.assertEquals(username, authData.username()),
+                () -> Assertions.assertNotNull(authData.authToken()),
+                () -> Assertions.assertTrue(authData.authToken().length() > 10));
+    }
+
+    @Test
+    void registerRejectsDuplicateUsername() throws ServerFacadeException {
+        String username = "duplicate-player";
+        facade.register(username, "first-password", "first@example.com");
+
+        ServerFacadeException exception = Assertions.assertThrows(
+                ServerFacadeException.class,
+                () -> facade.register(
+                        username,
+                        "second-password",
+                        "second@example.com"));
+
+        Assertions.assertEquals("Error: already taken", exception.getMessage());
     }
 
     private int findUnavailablePort() throws IOException {
