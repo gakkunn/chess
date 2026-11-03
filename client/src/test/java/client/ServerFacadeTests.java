@@ -127,6 +127,41 @@ public class ServerFacadeTests {
         Assertions.assertEquals("Error: unauthorized", exception.getMessage());
     }
 
+    @Test
+    void logoutEndsAuthenticatedSession() throws ServerFacadeException {
+        AuthData authData = facade.register(
+                "logout-player",
+                "logout-password",
+                "logout@example.com");
+
+        Assertions.assertDoesNotThrow(
+                () -> facade.logout(authData.authToken()));
+    }
+
+    @Test
+    void logoutRejectsInvalidAuthToken() {
+        ServerFacadeException exception = Assertions.assertThrows(
+                ServerFacadeException.class,
+                () -> facade.logout("invalid-auth-token"));
+
+        Assertions.assertEquals("Error: unauthorized", exception.getMessage());
+    }
+
+    @Test
+    void logoutPreventsAuthTokenReuse() throws ServerFacadeException {
+        AuthData authData = facade.register(
+                "single-session-player",
+                "single-session-password",
+                "single-session@example.com");
+        facade.logout(authData.authToken());
+
+        ServerFacadeException exception = Assertions.assertThrows(
+                ServerFacadeException.class,
+                () -> facade.logout(authData.authToken()));
+
+        Assertions.assertEquals("Error: unauthorized", exception.getMessage());
+    }
+
     private int findUnavailablePort() throws IOException {
         try (ServerSocket socket = new ServerSocket(0)) {
             return socket.getLocalPort();

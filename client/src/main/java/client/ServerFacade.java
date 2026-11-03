@@ -50,6 +50,15 @@ public class ServerFacade {
                 AuthData.class);
     }
 
+    public void logout(String authToken) throws ServerFacadeException {
+        communicator.sendRequest(
+                "DELETE",
+                "/session",
+                null,
+                authToken,
+                Void.class);
+    }
+
     private static String createLocalServerUrl(int port) {
         if (port < 1 || port > 65535) {
             throw new IllegalArgumentException(
