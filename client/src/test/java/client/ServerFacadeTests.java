@@ -83,6 +83,50 @@ public class ServerFacadeTests {
         Assertions.assertEquals("Error: already taken", exception.getMessage());
     }
 
+    @Test
+    void loginAuthenticatesRegisteredUser() throws ServerFacadeException {
+        String username = "returning-player";
+        String password = "correct-password";
+        AuthData registration = facade.register(
+                username,
+                password,
+                "returning@example.com");
+
+        AuthData login = facade.login(username, password);
+
+        Assertions.assertAll(
+                () -> Assertions.assertEquals(username, login.username()),
+                () -> Assertions.assertNotNull(login.authToken()),
+                () -> Assertions.assertTrue(login.authToken().length() > 10),
+                () -> Assertions.assertNotEquals(
+                        registration.authToken(),
+                        login.authToken()));
+    }
+
+    @Test
+    void loginRejectsIncorrectPassword() throws ServerFacadeException {
+        String username = "password-test-player";
+        facade.register(
+                username,
+                "correct-password",
+                "password-test@example.com");
+
+        ServerFacadeException exception = Assertions.assertThrows(
+                ServerFacadeException.class,
+                () -> facade.login(username, "incorrect-password"));
+
+        Assertions.assertEquals("Error: unauthorized", exception.getMessage());
+    }
+
+    @Test
+    void loginRejectsUnknownUser() {
+        ServerFacadeException exception = Assertions.assertThrows(
+                ServerFacadeException.class,
+                () -> facade.login("unknown-player", "any-password"));
+
+        Assertions.assertEquals("Error: unauthorized", exception.getMessage());
+    }
+
     private int findUnavailablePort() throws IOException {
         try (ServerSocket socket = new ServerSocket(0)) {
             return socket.getLocalPort();

@@ -38,6 +38,18 @@ public class ServerFacade {
                 AuthData.class);
     }
 
+    public AuthData login(String username, String password)
+            throws ServerFacadeException {
+        LoginRequest request = new LoginRequest(username, password);
+
+        return communicator.sendRequest(
+                "POST",
+                "/session",
+                request,
+                null,
+                AuthData.class);
+    }
+
     private static String createLocalServerUrl(int port) {
         if (port < 1 || port > 65535) {
             throw new IllegalArgumentException(
@@ -51,5 +63,8 @@ public class ServerFacade {
             String username,
             String password,
             String email) {
+    }
+
+    private record LoginRequest(String username, String password) {
     }
 }
