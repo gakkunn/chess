@@ -10,6 +10,7 @@ import server.Server;
 
 import java.io.IOException;
 import java.net.ServerSocket;
+import java.util.List;
 
 public class ServerFacadeTests {
 
@@ -199,6 +200,48 @@ public class ServerFacadeTests {
                 () -> facade.createGame(authData.authToken(), "   "));
 
         Assertions.assertEquals("Error: bad request", exception.getMessage());
+    }
+
+    @Test
+    void listGamesReturnsEmptyListInitially() throws ServerFacadeException {
+        AuthData authData = facade.register(
+                "empty-list-player",
+                "list-password",
+                "empty-list@example.com");
+
+        List<GameSummary> games = facade.listGames(authData.authToken());
+
+        Assertions.assertTrue(games.isEmpty());
+    }
+
+    @Test
+    void listGamesReturnsCreatedGamesInOrder() throws ServerFacadeException {
+        AuthData authData = facade.register(
+                "game-list-player",
+                "list-password",
+                "game-list@example.com");
+        int firstGameID = facade.createGame(
+                authData.authToken(),
+                "First Game");
+        int secondGameID = facade.createGame(
+                authData.authToken(),
+                "Second Game");
+
+        List<GameSummary> games = facade.listGames(authData.authToken());
+
+        List<GameSummary> expectedGames = List.of(
+                new GameSummary(firstGameID, null, null, "First Game"),
+                new GameSummary(secondGameID, null, null, "Second Game"));
+        Assertions.assertEquals(expectedGames, games);
+    }
+
+    @Test
+    void listGamesRejectsInvalidAuthToken() {
+        ServerFacadeException exception = Assertions.assertThrows(
+                ServerFacadeException.class,
+                () -> facade.listGames("invalid-auth-token"));
+
+        Assertions.assertEquals("Error: unauthorized", exception.getMessage());
     }
 
     private int findUnavailablePort() throws IOException {

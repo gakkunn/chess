@@ -2,6 +2,8 @@ package client;
 
 import model.AuthData;
 
+import java.util.List;
+
 public class ServerFacade {
 
     private final HttpCommunicator communicator;
@@ -73,6 +75,23 @@ public class ServerFacade {
         return response.gameID();
     }
 
+    public List<GameSummary> listGames(String authToken)
+            throws ServerFacadeException {
+        ListGamesResponse response = communicator.sendRequest(
+                "GET",
+                "/game",
+                null,
+                authToken,
+                ListGamesResponse.class);
+
+        if (response.games() == null) {
+            throw new ServerFacadeException(
+                    "The chess server returned an invalid game list.");
+        }
+
+        return List.copyOf(response.games());
+    }
+
     private static String createLocalServerUrl(int port) {
         if (port < 1 || port > 65535) {
             throw new IllegalArgumentException(
@@ -95,5 +114,8 @@ public class ServerFacade {
     }
 
     private record CreateGameResponse(int gameID) {
+    }
+
+    private record ListGamesResponse(List<GameSummary> games) {
     }
 }
