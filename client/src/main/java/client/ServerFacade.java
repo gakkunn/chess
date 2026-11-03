@@ -59,6 +59,20 @@ public class ServerFacade {
                 Void.class);
     }
 
+    public int createGame(String authToken, String gameName)
+            throws ServerFacadeException {
+        CreateGameRequest request = new CreateGameRequest(gameName);
+
+        CreateGameResponse response = communicator.sendRequest(
+                "POST",
+                "/game",
+                request,
+                authToken,
+                CreateGameResponse.class);
+
+        return response.gameID();
+    }
+
     private static String createLocalServerUrl(int port) {
         if (port < 1 || port > 65535) {
             throw new IllegalArgumentException(
@@ -75,5 +89,11 @@ public class ServerFacade {
     }
 
     private record LoginRequest(String username, String password) {
+    }
+
+    private record CreateGameRequest(String gameName) {
+    }
+
+    private record CreateGameResponse(int gameID) {
     }
 }

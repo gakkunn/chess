@@ -162,6 +162,45 @@ public class ServerFacadeTests {
         Assertions.assertEquals("Error: unauthorized", exception.getMessage());
     }
 
+    @Test
+    void createGameReturnsPositiveGameID() throws ServerFacadeException {
+        AuthData authData = facade.register(
+                "game-creator",
+                "creator-password",
+                "creator@example.com");
+
+        int gameID = facade.createGame(
+                authData.authToken(),
+                "Friendly Match");
+
+        Assertions.assertTrue(gameID > 0);
+    }
+
+    @Test
+    void createGameRejectsInvalidAuthToken() {
+        ServerFacadeException exception = Assertions.assertThrows(
+                ServerFacadeException.class,
+                () -> facade.createGame(
+                        "invalid-auth-token",
+                        "Unauthorized Match"));
+
+        Assertions.assertEquals("Error: unauthorized", exception.getMessage());
+    }
+
+    @Test
+    void createGameRejectsBlankName() throws ServerFacadeException {
+        AuthData authData = facade.register(
+                "blank-name-creator",
+                "creator-password",
+                "blank-name@example.com");
+
+        ServerFacadeException exception = Assertions.assertThrows(
+                ServerFacadeException.class,
+                () -> facade.createGame(authData.authToken(), "   "));
+
+        Assertions.assertEquals("Error: bad request", exception.getMessage());
+    }
+
     private int findUnavailablePort() throws IOException {
         try (ServerSocket socket = new ServerSocket(0)) {
             return socket.getLocalPort();
