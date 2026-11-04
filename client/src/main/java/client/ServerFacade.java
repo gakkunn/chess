@@ -1,5 +1,6 @@
 package client;
 
+import chess.ChessGame;
 import model.AuthData;
 
 import java.util.List;
@@ -92,6 +93,20 @@ public class ServerFacade {
         return List.copyOf(response.games());
     }
 
+    public void joinGame(
+            String authToken,
+            ChessGame.TeamColor playerColor,
+            int gameID) throws ServerFacadeException {
+        JoinGameRequest request = new JoinGameRequest(playerColor, gameID);
+
+        communicator.sendRequest(
+                "PUT",
+                "/game",
+                request,
+                authToken,
+                Void.class);
+    }
+
     private static String createLocalServerUrl(int port) {
         if (port < 1 || port > 65535) {
             throw new IllegalArgumentException(
@@ -117,5 +132,10 @@ public class ServerFacade {
     }
 
     private record ListGamesResponse(List<GameSummary> games) {
+    }
+
+    private record JoinGameRequest(
+            ChessGame.TeamColor playerColor,
+            int gameID) {
     }
 }

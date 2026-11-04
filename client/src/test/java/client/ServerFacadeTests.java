@@ -1,5 +1,6 @@
 package client;
 
+import chess.ChessGame;
 import model.AuthData;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assertions;
@@ -242,6 +243,132 @@ public class ServerFacadeTests {
                 () -> facade.listGames("invalid-auth-token"));
 
         Assertions.assertEquals("Error: unauthorized", exception.getMessage());
+    }
+
+    @Test
+    void joinGameAssignsWhitePlayer() throws ServerFacadeException {
+        AuthData authData = facade.register(
+                "white-player",
+                "white-password",
+                "white@example.com");
+        int gameID = facade.createGame(authData.authToken(), "White Game");
+
+        Assertions.assertDoesNotThrow(() -> facade.joinGame(
+                authData.authToken(),
+                ChessGame.TeamColor.WHITE,
+                gameID));
+
+        GameSummary game = facade.listGames(authData.authToken()).get(0);
+        Assertions.assertAll(
+                () -> Assertions.assertEquals(gameID, game.gameID()),
+                () -> Assertions.assertEquals(
+                        authData.username(),
+                        game.whiteUsername()),
+                () -> Assertions.assertNull(game.blackUsername()));
+    }
+
+    @Test
+    void joinGameAssignsBlackPlayer() throws ServerFacadeException {
+        AuthData authData = facade.register(
+                "black-player",
+                "black-password",
+                "black@example.com");
+        int gameID = facade.createGame(authData.authToken(), "Black Game");
+
+        Assertions.assertDoesNotThrow(() -> facade.joinGame(
+                authData.authToken(),
+                ChessGame.TeamColor.BLACK,
+                gameID));
+
+        GameSummary game = facade.listGames(authData.authToken()).get(0);
+        Assertions.assertAll(
+                () -> Assertions.assertEquals(gameID, game.gameID()),
+                () -> Assertions.assertNull(game.whiteUsername()),
+                () -> Assertions.assertEquals(
+                        authData.username(),
+                        game.blackUsername()));
+    }
+
+    @Test
+    void joinGameRejectsTakenColor() throws ServerFacadeException {
+        AuthData firstPlayer = facade.register(
+                "first-white-player",
+                "first-password",
+                "first-white@example.com");
+        AuthData secondPlayer = facade.register(
+                "second-white-player",
+                "second-password",
+                "second-white@example.com");
+        int gameID = facade.createGame(
+                firstPlayer.authToken(),
+                "Contested Game");
+        facade.joinGame(
+                firstPlayer.authToken(),
+                ChessGame.TeamColor.WHITE,
+                gameID);
+
+        ServerFacadeException exception = Assertions.assertThrows(
+                ServerFacadeException.class,
+                () -> facade.joinGame(
+                        secondPlayer.authToken(),
+                        ChessGame.TeamColor.WHITE,
+                        gameID));
+
+        Assertions.assertEquals("Error: already taken", exception.getMessage());
+    }
+
+    @Test
+    void joinGameRejectsUnknownGame() throws ServerFacadeException {
+        AuthData authData = facade.register(
+                "unknown-game-player",
+                "unknown-game-password",
+                "unknown-game@example.com");
+
+        ServerFacadeException exception = Assertions.assertThrows(
+                ServerFacadeException.class,
+                () -> facade.joinGame(
+                        authData.authToken(),
+                        ChessGame.TeamColor.WHITE,
+                        Integer.MAX_VALUE));
+
+        Assertions.assertEquals("Error: bad request", exception.getMessage());
+    }
+
+    @Test
+    void joinGameRejectsInvalidAuthToken() throws ServerFacadeException {
+        AuthData authData = facade.register(
+                "join-game-creator",
+                "creator-password",
+                "join-game-creator@example.com");
+        int gameID = facade.createGame(
+                authData.authToken(),
+                "Protected Game");
+
+        ServerFacadeException exception = Assertions.assertThrows(
+                ServerFacadeException.class,
+                () -> facade.joinGame(
+                        "invalid-auth-token",
+                        ChessGame.TeamColor.BLACK,
+                        gameID));
+
+        Assertions.assertEquals("Error: unauthorized", exception.getMessage());
+    }
+
+    @Test
+    void joinGameRejectsMissingColor() throws ServerFacadeException {
+        AuthData authData = facade.register(
+                "missing-color-player",
+                "missing-color-password",
+                "missing-color@example.com");
+        int gameID = facade.createGame(
+                authData.authToken(),
+                "Color Required Game");
+
+        ServerFacadeException exception = Assertions.assertThrows(
+                ServerFacadeException.class,
+                () -> facade.joinGame(authData.authToken(), null, gameID));
+
+        Assertions.assertEquals("Error: bad request", exception.getMessage());
     }
 
     private int findUnavailablePort() throws IOException {
