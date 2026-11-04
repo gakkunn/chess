@@ -13,25 +13,46 @@ public class BoardRenderer {
     private static final String LINE_SEPARATOR = System.lineSeparator();
 
     public String renderWhite(ChessBoard board) {
+        return render(board, ChessGame.TeamColor.WHITE);
+    }
+
+    public String render(
+            ChessBoard board,
+            ChessGame.TeamColor perspective) {
         Objects.requireNonNull(board, "Chess board cannot be null.");
+        Objects.requireNonNull(perspective, "Board perspective cannot be null.");
 
         StringBuilder output = new StringBuilder();
-        appendColumnLabels(output);
+        appendColumnLabels(output, perspective);
 
-        for (int row = BOARD_SIZE; row >= 1; row--) {
-            appendRow(output, board, row);
+        int firstRow = perspective == ChessGame.TeamColor.WHITE
+                ? BOARD_SIZE
+                : 1;
+        int rowDirection = perspective == ChessGame.TeamColor.WHITE ? -1 : 1;
+
+        for (int index = 0; index < BOARD_SIZE; index++) {
+            int row = firstRow + index * rowDirection;
+            appendRow(output, board, row, perspective);
         }
 
-        appendColumnLabels(output);
+        appendColumnLabels(output, perspective);
         return output.toString();
     }
 
-    private void appendColumnLabels(StringBuilder output) {
+    private void appendColumnLabels(
+            StringBuilder output,
+            ChessGame.TeamColor perspective) {
         output.append(EscapeSequences.SET_BG_COLOR_LIGHT_GREY)
                 .append(EscapeSequences.SET_TEXT_COLOR_BLACK)
                 .append("   ");
 
-        for (int column = 1; column <= BOARD_SIZE; column++) {
+        int firstColumn = perspective == ChessGame.TeamColor.WHITE
+                ? 1
+                : BOARD_SIZE;
+        int columnDirection = perspective == ChessGame.TeamColor.WHITE ? 1 : -1;
+
+        for (int index = 0; index < BOARD_SIZE; index++) {
+            int column = firstColumn + index * columnDirection;
             char label = (char) ('a' + column - 1);
             output.append(' ').append(label).append(' ');
         }
@@ -44,10 +65,17 @@ public class BoardRenderer {
     private void appendRow(
             StringBuilder output,
             ChessBoard board,
-            int row) {
+            int row,
+            ChessGame.TeamColor perspective) {
         appendRowLabel(output, row);
 
-        for (int column = 1; column <= BOARD_SIZE; column++) {
+        int firstColumn = perspective == ChessGame.TeamColor.WHITE
+                ? 1
+                : BOARD_SIZE;
+        int columnDirection = perspective == ChessGame.TeamColor.WHITE ? 1 : -1;
+
+        for (int index = 0; index < BOARD_SIZE; index++) {
+            int column = firstColumn + index * columnDirection;
             appendSquare(output, board, row, column);
         }
 
