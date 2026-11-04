@@ -1,18 +1,18 @@
 package client;
 
-import chess.ChessGame;
-import chess.ChessPiece;
+import ui.Repl;
 
-/**
- * Provides the temporary command-line entry point for the chess client.
- */
 public class ClientMain {
 
-    public static void main(String[] args) {
-        ChessPiece piece = new ChessPiece(
-                ChessGame.TeamColor.WHITE,
-                ChessPiece.PieceType.PAWN);
+    private static final String DEFAULT_SERVER_URL = "http://localhost:8080";
 
-        System.out.println("240 Chess Client: " + piece);
+    public static void main(String[] args) {
+        if (args.length > 1) {
+            System.err.println("Usage: ClientMain [server-url]");
+            return;
+        }
+
+        String serverUrl = args.length == 1 ? args[0] : DEFAULT_SERVER_URL;
+        new Repl(serverUrl).run();
     }
 }
