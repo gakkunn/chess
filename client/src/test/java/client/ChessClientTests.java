@@ -1,16 +1,38 @@
 package client;
 
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import server.Server;
+
+import java.io.IOException;
+import java.net.ServerSocket;
 
 public class ChessClientTests {
 
+    private static Server server;
+    private static ServerFacade facade;
+
     private ChessClient client;
 
+    @BeforeAll
+    static void startServer() {
+        server = new Server();
+        int port = server.run(0);
+        facade = new ServerFacade(port);
+    }
+
     @BeforeEach
-    void setUp() {
-        client = new ChessClient("http://localhost:8080");
+    void setUp() throws ServerFacadeException {
+        facade.clear();
+        client = new ChessClient(facade);
+    }
+
+    @AfterAll
+    static void stopServer() {
+        server.stop();
     }
 
     @Test
@@ -82,5 +104,131 @@ public class ChessClientTests {
                 () -> Assertions.assertEquals(
                         ClientState.SIGNED_OUT,
                         client.getState()));
+    }
+
+    @Test
+    void registerCreatesSessionAndSignsIn() {
+        String response = client.evaluate(
+                "register new-client register-password client@example.com");
+
+        String help = client.evaluate("help");
+        Assertions.assertAll(
+                () -> Assertions.assertEquals(
+                        "Signed in as new-client.",
+                        response),
+                () -> Assertions.assertEquals(
+                        ClientState.SIGNED_IN,
+                        client.getState()),
+                () -> Assertions.assertTrue(help.contains("create")),
+                () -> Assertions.assertFalse(response.contains("authToken")));
+    }
+
+    @Test
+    void loginCreatesSessionAndSignsIn() throws ServerFacadeException {
+        facade.register(
+                "existing-client",
+                "login-password",
+                "existing@example.com");
+
+        String response = client.evaluate(
+                "login existing-client login-password");
+
+        Assertions.assertAll(
+                () -> Assertions.assertEquals(
+                        "Signed in as existing-client.",
+                        response),
+                () -> Assertions.assertEquals(
+                        ClientState.SIGNED_IN,
+                        client.getState()));
+    }
+
+    @Test
+    void registerRejectsIncorrectArgumentCount() {
+        String response = client.evaluate("register username password");
+
+        Assertions.assertAll(
+                () -> Assertions.assertEquals(
+                        "Usage: register <username> <password> <email>",
+                        response),
+                () -> Assertions.assertEquals(
+                        ClientState.SIGNED_OUT,
+                        client.getState()));
+    }
+
+    @Test
+    void loginRejectsIncorrectArgumentCount() {
+        String response = client.evaluate("login username");
+
+        Assertions.assertAll(
+                () -> Assertions.assertEquals(
+                        "Usage: login <username> <password>",
+                        response),
+                () -> Assertions.assertEquals(
+                        ClientState.SIGNED_OUT,
+                        client.getState()));
+    }
+
+    @Test
+    void registerReportsDuplicateUsernameWithoutSigningIn()
+            throws ServerFacadeException {
+        facade.register(
+                "duplicate-client",
+                "first-password",
+                "first@example.com");
+
+        String response = client.evaluate(
+                "register duplicate-client second-password second@example.com");
+
+        Assertions.assertAll(
+                () -> Assertions.assertEquals(
+                        "That username is already taken.",
+                        response),
+                () -> Assertions.assertEquals(
+                        ClientState.SIGNED_OUT,
+                        client.getState()));
+    }
+
+    @Test
+    void loginReportsIncorrectCredentialsWithoutSigningIn()
+            throws ServerFacadeException {
+        facade.register(
+                "password-client",
+                "correct-password",
+                "password-client@example.com");
+
+        String response = client.evaluate(
+                "login password-client incorrect-password");
+
+        Assertions.assertAll(
+                () -> Assertions.assertEquals(
+                        "The username or password is incorrect.",
+                        response),
+                () -> Assertions.assertEquals(
+                        ClientState.SIGNED_OUT,
+                        client.getState()));
+    }
+
+    @Test
+    void registerReportsUnavailableServerWithoutCrashing() throws IOException {
+        int unavailablePort = findUnavailablePort();
+        ChessClient unavailableClient = new ChessClient(
+                new ServerFacade(unavailablePort));
+
+        String response = unavailableClient.evaluate(
+                "register offline password offline@example.com");
+
+        Assertions.assertAll(
+                () -> Assertions.assertEquals(
+                        "Unable to reach the chess server.",
+                        response),
+                () -> Assertions.assertEquals(
+                        ClientState.SIGNED_OUT,
+                        unavailableClient.getState()));
+    }
+
+    private int findUnavailablePort() throws IOException {
+        try (ServerSocket socket = new ServerSocket(0)) {
+            return socket.getLocalPort();
+        }
     }
 }

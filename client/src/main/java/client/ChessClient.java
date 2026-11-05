@@ -1,5 +1,7 @@
 package client;
 
+import model.AuthData;
+
 import java.util.Locale;
 import java.util.Objects;
 
@@ -26,6 +28,7 @@ public class ChessClient {
 
     private final ServerFacade serverFacade;
     private ClientState state;
+    private AuthData session;
 
     public ChessClient(String serverUrl) {
         this(new ServerFacade(serverUrl));
@@ -54,11 +57,62 @@ public class ChessClient {
         String[] tokens = input.trim().split("\\s+");
         String command = tokens[0].toLowerCase(Locale.ROOT);
 
-        return switch (command) {
-            case "help" -> showHelp(tokens.length);
-            case "quit" -> quit(tokens.length);
-            default -> "Unknown command. Type 'help' to see available commands.";
+        if (command.equals("help")) {
+            return showHelp(tokens.length);
+        }
+
+        if (command.equals("quit")) {
+            return quit(tokens.length);
+        }
+
+        return switch (state) {
+            case SIGNED_OUT -> evaluatePreloginCommand(command, tokens);
+            case SIGNED_IN -> unknownCommand();
+            case QUIT -> "The chess client is closed.";
         };
+    }
+
+    private String evaluatePreloginCommand(String command, String[] tokens) {
+        return switch (command) {
+            case "register" -> register(tokens);
+            case "login" -> login(tokens);
+            default -> unknownCommand();
+        };
+    }
+
+    private String register(String[] tokens) {
+        if (tokens.length != 4) {
+            return "Usage: register <username> <password> <email>";
+        }
+
+        try {
+            AuthData authData = serverFacade.register(
+                    tokens[1],
+                    tokens[2],
+                    tokens[3]);
+            return beginSession(authData);
+        } catch (ServerFacadeException exception) {
+            return userMessage(exception);
+        }
+    }
+
+    private String login(String[] tokens) {
+        if (tokens.length != 3) {
+            return "Usage: login <username> <password>";
+        }
+
+        try {
+            AuthData authData = serverFacade.login(tokens[1], tokens[2]);
+            return beginSession(authData);
+        } catch (ServerFacadeException exception) {
+            return userMessage(exception);
+        }
+    }
+
+    private String beginSession(AuthData authData) {
+        session = authData;
+        state = ClientState.SIGNED_IN;
+        return "Signed in as " + authData.username() + ".";
     }
 
     private String showHelp(int tokenCount) {
@@ -80,5 +134,26 @@ public class ChessClient {
 
         state = ClientState.QUIT;
         return "Goodbye.";
+    }
+
+    private String unknownCommand() {
+        return "Unknown command. Type 'help' to see available commands.";
+    }
+
+    private String userMessage(ServerFacadeException exception) {
+        String message = exception.getMessage();
+
+        if (message == null || message.isBlank()) {
+            return "The request could not be completed.";
+        }
+
+        return switch (message) {
+            case "Error: already taken" -> "That username is already taken.";
+            case "Error: unauthorized" ->
+                    "The username or password is incorrect.";
+            case "Error: bad request" ->
+                    "Please check the information and try again.";
+            default -> message;
+        };
     }
 }
