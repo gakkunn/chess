@@ -3,6 +3,7 @@ package client;
 import chess.ChessGame;
 import model.AuthData;
 import ui.BoardRenderer;
+import ui.GameListRenderer;
 
 import java.util.Arrays;
 import java.util.List;
@@ -32,6 +33,7 @@ public class ChessClient {
 
     private final ServerFacade serverFacade;
     private final BoardRenderer boardRenderer;
+    private final GameListRenderer gameListRenderer;
     private ClientState state;
     private AuthData session;
     private List<GameSummary> displayedGames;
@@ -45,6 +47,7 @@ public class ChessClient {
                 serverFacade,
                 "Server facade cannot be null.");
         boardRenderer = new BoardRenderer();
+        gameListRenderer = new GameListRenderer();
         state = ClientState.SIGNED_OUT;
         displayedGames = List.of();
     }
@@ -174,41 +177,10 @@ public class ChessClient {
 
         try {
             displayedGames = serverFacade.listGames(session.authToken());
-            return formatGameList(displayedGames);
+            return gameListRenderer.render(displayedGames);
         } catch (ServerFacadeException exception) {
             return authenticatedUserMessage(exception);
         }
-    }
-
-    private String formatGameList(List<GameSummary> games) {
-        if (games.isEmpty()) {
-            return "No games are available.";
-        }
-
-        StringBuilder response = new StringBuilder("Available games:");
-
-        for (int index = 0; index < games.size(); index++) {
-            GameSummary game = games.get(index);
-            response.append(System.lineSeparator())
-                    .append("  ")
-                    .append(index + 1)
-                    .append(". ")
-                    .append(game.gameName())
-                    .append(" | White: ")
-                    .append(playerName(game.whiteUsername()))
-                    .append(" | Black: ")
-                    .append(playerName(game.blackUsername()));
-        }
-
-        return response.toString();
-    }
-
-    private String playerName(String username) {
-        if (username == null || username.isBlank()) {
-            return "Open";
-        }
-
-        return username;
     }
 
     private String playGame(String[] tokens) {

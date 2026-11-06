@@ -44,11 +44,31 @@ consistent JSON error format.
 The complete 321-test suite passes, including all 23 `StandardAPITests` and all 3
 `DatabaseTests`. The `dataaccess.sql` package has 92.47% line coverage.
 
+## Phase 5 Chess Pregame
+
+The terminal client now supports the complete pregame workflow. Signed-out users
+can register, log in, view help, or quit. Signed-in users can create and list
+games, join by the displayed list number and color, observe a listed game, log
+out, view help, or quit. Joining and observing display the initial chessboard
+from the required perspective without exposing authentication tokens or internal
+game IDs.
+
+Client responsibilities are separated across the following components:
+
+- `Repl` manages terminal input, output, and prompts.
+- `ChessClient` manages command routing, authentication state, and game selection.
+- `ServerFacade` and `HttpCommunicator` isolate HTTP and JSON communication.
+- `BoardRenderer` and `GameListRenderer` format user-facing output.
+
+The complete 392-test suite passes. `ServerFacade` has 92.31% line coverage, with
+positive and negative tests for every public operation.
+
 ## Modules
 
 The application has three modules.
 
-- **Client**: The command-line entry point that will become the interactive chess client in later phases.
+- **Client**: The interactive command-line chess client, HTTP server facade, and
+  terminal renderers.
 - **Server**: The HTTP server, request handlers, services, data access interfaces,
   in-memory and SQL data access implementations, and server tests.
 - **Shared**: Chess rules and data models shared by the client and server.
@@ -79,10 +99,11 @@ This repository uses IntelliJ module files and requires JDK 23.
    ```
 
 5. Run `server.ServerMain` to start the server on port `8080`.
-6. Run `passoff.server.StandardAPITests` and `passoff.server.DatabaseTests` for the
-   official Phase 4 verification.
-7. Run the `chess`, `passoff.chess`, `dataaccess`, `model`, `server`, and `service`
-   test packages for the complete project verification set.
+6. With the server running, run `client.ClientMain` to use the client with the
+   default `http://localhost:8080` server. An alternate server URL can be passed
+   as the client's single command-line argument.
+7. Run all tests under `shared/src/test`, `server/src/test`, and `client/src/test`
+   for the complete project verification set.
 
 The `db.properties` file is ignored by Git so that database credentials are not
 committed. Restarting the server preserves application data in MySQL.

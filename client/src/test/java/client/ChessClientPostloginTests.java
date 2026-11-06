@@ -64,6 +64,20 @@ public class ChessClientPostloginTests {
     }
 
     @Test
+    void helpListsEveryPostloginCommand() {
+        String response = client.evaluate("help");
+
+        Assertions.assertAll(
+                () -> Assertions.assertTrue(response.contains("create")),
+                () -> Assertions.assertTrue(response.contains("list")),
+                () -> Assertions.assertTrue(response.contains("play")),
+                () -> Assertions.assertTrue(response.contains("observe")),
+                () -> Assertions.assertTrue(response.contains("logout")),
+                () -> Assertions.assertTrue(response.contains("help")),
+                () -> Assertions.assertTrue(response.contains("quit")));
+    }
+
+    @Test
     void createGameCreatesNamedGameWithoutJoining()
             throws ServerFacadeException {
         String response = client.evaluate("create Weekend Match");
