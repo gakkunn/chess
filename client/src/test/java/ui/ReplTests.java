@@ -1,8 +1,12 @@
 package ui;
 
 import client.ChessClient;
+import client.ServerFacade;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import server.Server;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -11,6 +15,21 @@ import java.nio.charset.StandardCharsets;
 import java.util.Scanner;
 
 public class ReplTests {
+
+    private static Server server;
+    private static ServerFacade facade;
+
+    @BeforeAll
+    static void startServer() {
+        server = new Server();
+        int port = server.run(0);
+        facade = new ServerFacade(port);
+    }
+
+    @AfterAll
+    static void stopServer() {
+        server.stop();
+    }
 
     @Test
     void runProcessesCommandsUntilQuit() {
@@ -42,7 +61,7 @@ public class ReplTests {
                      output,
                      true,
                      StandardCharsets.UTF_8)) {
-            ChessClient client = new ChessClient("http://localhost:8080");
+            ChessClient client = new ChessClient(facade);
             Repl repl = new Repl(client, scanner, printStream);
             repl.run();
         }

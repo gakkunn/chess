@@ -56,7 +56,9 @@ game IDs.
 Client responsibilities are separated across the following components:
 
 - `Repl` manages terminal input, output, and prompts.
-- `ChessClient` manages command routing, authentication state, and game selection.
+- `ChessClient` manages command routing and authentication state.
+- `GameCommandHandler` manages game commands, displayed-game selection, and board
+  responses.
 - `ServerFacade` and `HttpCommunicator` isolate HTTP and JSON communication.
 - `BoardRenderer` and `GameListRenderer` format user-facing output.
 
