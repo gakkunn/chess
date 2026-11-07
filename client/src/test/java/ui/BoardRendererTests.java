@@ -5,6 +5,8 @@ import chess.ChessGame;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 
 import java.util.regex.Pattern;
 
@@ -56,30 +58,6 @@ public class BoardRendererTests {
                 () -> Assertions.assertEquals(
                         "1  ♖  ♘  ♗  ♕  ♔  ♗  ♘  ♖  1",
                         lines[8].strip()));
-    }
-
-    @Test
-    void renderWhiteUsesCorrectAlternatingSquareColors() {
-        String renderedBoard = renderer.renderWhite(board);
-        String[] lines = renderedBoard.split("\\R");
-        int lightSquares = countOccurrences(
-                renderedBoard,
-                EscapeSequences.SET_BG_COLOR_WHITE);
-        int darkSquares = countOccurrences(
-                renderedBoard,
-                EscapeSequences.SET_BG_COLOR_DARK_GREEN);
-
-        Assertions.assertAll(
-                () -> Assertions.assertEquals(32, lightSquares),
-                () -> Assertions.assertEquals(32, darkSquares),
-                () -> Assertions.assertTrue(
-                        lines[1].indexOf(EscapeSequences.SET_BG_COLOR_WHITE)
-                                < lines[1].indexOf(
-                                EscapeSequences.SET_BG_COLOR_DARK_GREEN)),
-                () -> Assertions.assertTrue(
-                        lines[8].indexOf(EscapeSequences.SET_BG_COLOR_DARK_GREEN)
-                                < lines[8].indexOf(
-                                EscapeSequences.SET_BG_COLOR_WHITE)));
     }
 
     @Test
@@ -139,11 +117,13 @@ public class BoardRendererTests {
                         lines[8].strip()));
     }
 
-    @Test
-    void renderBlackUsesCorrectAlternatingSquareColors() {
+    @ParameterizedTest
+    @EnumSource(ChessGame.TeamColor.class)
+    void renderUsesCorrectAlternatingSquareColors(
+            ChessGame.TeamColor perspective) {
         String renderedBoard = renderer.render(
                 board,
-                ChessGame.TeamColor.BLACK);
+                perspective);
         String[] lines = renderedBoard.split("\\R");
         int lightSquares = countOccurrences(
                 renderedBoard,
