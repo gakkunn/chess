@@ -6,6 +6,8 @@ import chess.ChessMove;
 import chess.ChessPiece;
 import chess.ChessPosition;
 import chess.InvalidMoveException;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import dataaccess.sql.ChessGameJsonSerializer;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -23,6 +25,44 @@ public class ChessGameJsonSerializerTests {
         Assertions.assertEquals(originalGame, restoredGame);
         Assertions.assertNotSame(originalGame, restoredGame);
         Assertions.assertNotSame(originalGame.getBoard(), restoredGame.getBoard());
+        Assertions.assertFalse(restoredGame.isGameOver());
+    }
+
+    @Test
+    public void completedGameRoundTripPreservesStateAndRejectsMoves()
+            throws DataAccessException, InvalidMoveException {
+        ChessGame originalGame = new ChessGame();
+        originalGame.makeMove(move(2, 5, 4, 5));
+        originalGame.endGame();
+
+        String json = serializer.serialize(originalGame);
+        JsonObject object = JsonParser.parseString(json).getAsJsonObject();
+        ChessGame restoredGame = serializer.deserialize(json);
+
+        Assertions.assertTrue(object.get("gameOver").getAsBoolean());
+        Assertions.assertTrue(restoredGame.isGameOver());
+        Assertions.assertEquals(originalGame, restoredGame);
+        Assertions.assertThrows(
+                InvalidMoveException.class, () -> restoredGame.makeMove(move(7, 5, 5, 5)));
+        Assertions.assertEquals(originalGame, restoredGame);
+    }
+
+    @Test
+    public void legacyGameWithoutCompletionFlagRemainsPlayable()
+            throws DataAccessException, InvalidMoveException {
+        ChessGame originalGame = new ChessGame();
+        originalGame.makeMove(move(2, 5, 4, 5));
+        JsonObject legacyJson = JsonParser.parseString(
+                serializer.serialize(originalGame)).getAsJsonObject();
+        legacyJson.remove("gameOver");
+
+        ChessGame restoredGame = serializer.deserialize(legacyJson.toString());
+
+        Assertions.assertFalse(restoredGame.isGameOver());
+        Assertions.assertEquals(originalGame, restoredGame);
+        restoredGame.makeMove(move(7, 5, 5, 5));
+        Assertions.assertEquals(ChessGame.TeamColor.WHITE, restoredGame.getTeamTurn());
+        Assertions.assertFalse(restoredGame.isGameOver());
     }
 
     @Test

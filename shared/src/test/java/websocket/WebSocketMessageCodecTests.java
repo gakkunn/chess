@@ -129,6 +129,26 @@ public class WebSocketMessageCodecTests {
     }
 
     @Test
+    public void loadGamePreservesCompletionAndPreventsFurtherMoves()
+            throws InvalidMoveException {
+        ChessGame game = new ChessGame();
+        game.makeMove(new ChessMove(position(2, 5), position(4, 5), null));
+        game.endGame();
+
+        String json = codec.serialize(new LoadGameMessage(game));
+        LoadGameMessage restored = Assertions.assertInstanceOf(
+                LoadGameMessage.class, codec.deserializeMessage(json));
+
+        Assertions.assertTrue(parse(json).getAsJsonObject("game").get("gameOver").getAsBoolean());
+        Assertions.assertTrue(restored.getGame().isGameOver());
+        Assertions.assertEquals(game, restored.getGame());
+        Assertions.assertThrows(InvalidMoveException.class,
+                () -> restored.getGame().makeMove(
+                        new ChessMove(position(7, 5), position(5, 5), null)));
+        Assertions.assertEquals(game, restored.getGame());
+    }
+
+    @Test
     public void errorUsesRequiredFieldAndIncludesErrorPrefix() {
         ServerMessage message = new ErrorMessage("The requested move is not legal.");
 

@@ -4,6 +4,9 @@ import chess.ChessGame;
 import chess.ChessMove;
 import chess.ChessPosition;
 import chess.InvalidMoveException;
+import com.google.gson.Gson;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import dataaccess.sql.SQLGameDAO;
 import dataaccess.sql.SQLUserDAO;
 import model.GameData;
@@ -42,6 +45,7 @@ public class SQLGameDAOTests extends SQLDAOTestSupportTests {
         Assertions.assertNull(storedGame.blackUsername());
         Assertions.assertEquals(newGame.gameName(), storedGame.gameName());
         Assertions.assertEquals(newGame.game(), storedGame.game());
+        Assertions.assertFalse(storedGame.game().isGameOver());
     }
 
     @Test
@@ -110,6 +114,52 @@ public class SQLGameDAOTests extends SQLDAOTestSupportTests {
         Assertions.assertEquals(
                 ChessGame.TeamColor.BLACK,
                 storedGame.game().getTeamTurn());
+    }
+
+    @Test
+    public void updateGamePersistsCompletionAcrossDAOInstances()
+            throws DataAccessException, InvalidMoveException {
+        int gameID = gameDAO.createGame(createNewGame("Completed Game"));
+        GameData storedGame = gameDAO.getGame(gameID);
+        storedGame.game().makeMove(new ChessMove(
+                new ChessPosition(2, 5), new ChessPosition(4, 5), null));
+        storedGame.game().endGame();
+
+        gameDAO.updateGame(storedGame);
+        GameDAO reloadedDAO = new SQLGameDAO();
+        GameData restoredGame = reloadedDAO.getGame(gameID);
+
+        Assertions.assertEquals(storedGame, restoredGame);
+        Assertions.assertTrue(restoredGame.game().isGameOver());
+        Assertions.assertEquals(List.of(restoredGame), reloadedDAO.listGames());
+        Assertions.assertThrows(InvalidMoveException.class,
+                () -> restoredGame.game().makeMove(new ChessMove(
+                        new ChessPosition(7, 5), new ChessPosition(5, 5), null)));
+        Assertions.assertEquals(storedGame, restoredGame);
+        Assertions.assertEquals(storedGame, reloadedDAO.getGame(gameID));
+    }
+
+    @Test
+    public void legacyStoredGameWithoutCompletionFlagRemainsPlayable()
+            throws DataAccessException, InvalidMoveException, SQLException {
+        ChessGame originalGame = new ChessGame();
+        originalGame.makeMove(new ChessMove(
+                new ChessPosition(2, 5), new ChessPosition(4, 5), null));
+        JsonObject legacyJson = JsonParser.parseString(
+                new Gson().toJson(originalGame)).getAsJsonObject();
+        legacyJson.remove("gameOver");
+        int gameID = insertGameWithJson("Legacy Game", legacyJson.toString());
+
+        GameData restoredGame = new SQLGameDAO().getGame(gameID);
+
+        Assertions.assertFalse(restoredGame.game().isGameOver());
+        Assertions.assertEquals(originalGame, restoredGame.game());
+        restoredGame.game().makeMove(new ChessMove(
+                new ChessPosition(7, 5), new ChessPosition(5, 5), null));
+        gameDAO.updateGame(restoredGame);
+        GameData updatedGame = new SQLGameDAO().getGame(gameID);
+        Assertions.assertEquals(restoredGame, updatedGame);
+        Assertions.assertFalse(updatedGame.game().isGameOver());
     }
 
     @Test

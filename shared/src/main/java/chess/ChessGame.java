@@ -14,6 +14,7 @@ public class ChessGame {
 
     private TeamColor teamTurn;
     private ChessBoard board;
+    private boolean gameOver;
 
     public ChessGame() {
         board = new ChessBoard();
@@ -35,6 +36,17 @@ public class ChessGame {
      */
     public void setTeamTurn(TeamColor team) {
         teamTurn = team;
+    }
+
+    public boolean isGameOver() {
+        return gameOver;
+    }
+
+    /**
+     * Ends the game without changing its board or turn.
+     */
+    public void endGame() {
+        gameOver = true;
     }
 
     /**
@@ -95,6 +107,10 @@ public class ChessGame {
      * @throws InvalidMoveException if move is invalid
      */
     public void makeMove(ChessMove move) throws InvalidMoveException {
+        if (gameOver) {
+            throw new InvalidMoveException("The game is over");
+        }
+
         if (move == null
                 || move.getStartPosition() == null
                 || move.getEndPosition() == null) {
@@ -290,13 +306,14 @@ public class ChessGame {
 
         boolean sameTurn = teamTurn == otherGame.teamTurn;
         boolean sameBoard = Objects.equals(board, otherGame.board);
+        boolean sameCompletion = gameOver == otherGame.gameOver;
 
-        return sameTurn && sameBoard;
+        return sameTurn && sameBoard && sameCompletion;
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(teamTurn, board);
+        return Objects.hash(teamTurn, board, gameOver);
     }
 
     /**
