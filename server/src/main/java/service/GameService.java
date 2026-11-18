@@ -27,10 +27,16 @@ public class GameService {
 
     private final AuthDAO authDAO;
     private final GameDAO gameDAO;
+    private final GameLockManager gameLocks;
 
     public GameService(AuthDAO authDAO, GameDAO gameDAO) {
+        this(authDAO, gameDAO, new GameLockManager());
+    }
+
+    public GameService(AuthDAO authDAO, GameDAO gameDAO, GameLockManager gameLocks) {
         this.authDAO = authDAO;
         this.gameDAO = gameDAO;
+        this.gameLocks = gameLocks;
     }
 
     /**
@@ -87,16 +93,18 @@ public class GameService {
         validateJoinGameRequest(request);
         AuthData authenticatedSession = requireAuthenticatedSession(request.authToken());
 
-        GameData storedGame = gameDAO.getGame(request.gameID());
-        if (storedGame == null) {
-            throw new BadRequestException();
-        }
+        synchronized (gameLocks.forGame(request.gameID())) {
+            GameData storedGame = gameDAO.getGame(request.gameID());
+            if (storedGame == null) {
+                throw new BadRequestException();
+            }
 
-        GameData updatedGame = assignPlayerToGame(
-                storedGame,
-                request.playerColor(),
-                authenticatedSession.username());
-        gameDAO.updateGame(updatedGame);
+            GameData updatedGame = assignPlayerToGame(
+                    storedGame,
+                    request.playerColor(),
+                    authenticatedSession.username());
+            gameDAO.updateGame(updatedGame);
+        }
 
         return new JoinGameResult();
     }

@@ -15,12 +15,16 @@ import server.handler.ClearHandler;
 import server.handler.GameHandler;
 import server.handler.HttpErrorHandler;
 import server.handler.UserHandler;
+import server.websocket.ConnectionManager;
+import server.websocket.WebSocketHandler;
 import service.ClearService;
+import service.GameLockManager;
 import service.GameService;
+import service.GameplayService;
 import service.UserService;
 
 /**
- * Configures and runs the HTTP API for the chess server.
+ * Configures the chess HTTP API and gameplay WebSocket endpoint.
  */
 public class Server {
 
@@ -35,20 +39,34 @@ public class Server {
         javalin = Javalin.create(config -> config.staticFiles.add("web"));
 
         Gson serializer = new GsonBuilder().serializeNulls().create();
+        GameLockManager gameLocks = new GameLockManager();
+        ConnectionManager connections = new ConnectionManager();
         ClearService clearService = new ClearService(userDAO, authDAO, gameDAO);
         UserService userService = new UserService(userDAO, authDAO);
-        GameService gameService = new GameService(authDAO, gameDAO);
+        GameService gameService = new GameService(authDAO, gameDAO, gameLocks);
+        GameplayService gameplayService = new GameplayService(authDAO, gameDAO);
         ClearHandler clearHandler = new ClearHandler(clearService, serializer);
         UserHandler userHandler = new UserHandler(userService, serializer);
         GameHandler gameHandler = new GameHandler(gameService, serializer);
+        WebSocketHandler webSocketHandler = new WebSocketHandler(
+                gameplayService, connections, gameLocks);
 
-        javalin.delete("/db", clearHandler::handleClear);
+        javalin.delete("/db", context -> {
+            clearHandler.handleClear(context);
+            connections.clear();
+        });
         javalin.post("/user", userHandler::handleRegister);
         javalin.post("/session", userHandler::handleLogin);
         javalin.delete("/session", userHandler::handleLogout);
         javalin.post("/game", gameHandler::handleCreateGame);
         javalin.get("/game", gameHandler::handleListGames);
         javalin.put("/game", gameHandler::handleJoinGame);
+        javalin.ws("/ws", ws -> {
+            ws.onConnect(context -> context.enableAutomaticPings());
+            ws.onMessage(webSocketHandler::handleMessage);
+            ws.onClose(context -> connections.remove(context.session));
+            ws.onError(context -> connections.remove(context.session));
+        });
         HttpErrorHandler.register(javalin, serializer);
     }
 
