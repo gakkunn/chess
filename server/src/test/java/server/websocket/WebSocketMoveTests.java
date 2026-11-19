@@ -5,7 +5,6 @@ import chess.ChessGame;
 import chess.ChessMove;
 import chess.ChessPiece;
 import chess.ChessPosition;
-import dataaccess.DataAccessException;
 import dataaccess.MemoryGameDAO;
 import model.GameData;
 import org.junit.jupiter.api.Assertions;
@@ -20,9 +19,7 @@ import websocket.messages.LoadGameMessage;
 import websocket.messages.NotificationMessage;
 
 import java.util.List;
-import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Stream;
 
 public class WebSocketMoveTests extends WebSocketEndpointTestSupport {
@@ -208,7 +205,9 @@ public class WebSocketMoveTests extends WebSocketEndpointTestSupport {
 
         white.send(new MakeMoveCommand("white-token", gameID, move));
 
-        assertMoveDelivered(expected, white, "white", move);
+        String status = promotion == ChessPiece.PieceType.QUEEN || promotion == ChessPiece.PieceType.ROOK
+                ? "black is in check." : null;
+        assertMoveDelivered(expected, white, "white", move, status);
         Assertions.assertEquals(new ChessPiece(ChessGame.TeamColor.WHITE, promotion),
                 gameDAO.getGame(gameID).game().getBoard().getPiece(new ChessPosition(8, 3)));
     }
@@ -298,6 +297,12 @@ public class WebSocketMoveTests extends WebSocketEndpointTestSupport {
 
     private void assertMoveDelivered(ChessGame expected, SocketClient mover, String username, ChessMove move)
             throws Exception {
+        assertMoveDelivered(expected, mover, username, move, null);
+    }
+
+    private void assertMoveDelivered(
+            ChessGame expected, SocketClient mover, String username, ChessMove move, String status)
+            throws Exception {
         for (SocketClient client : List.of(white, black, observer)) {
             LoadGameMessage update = Assertions.assertInstanceOf(LoadGameMessage.class, client.receive());
             Assertions.assertEquals(expected, update.getGame());
@@ -310,6 +315,10 @@ public class WebSocketMoveTests extends WebSocketEndpointTestSupport {
                     Assertions.assertTrue(notice.getMessage().contains(move.getPromotionPiece().name()));
                 }
             }
+            if (status != null) {
+                NotificationMessage notice = Assertions.assertInstanceOf(NotificationMessage.class, client.receive());
+                Assertions.assertEquals(status, notice.getMessage());
+            }
         }
         Assertions.assertEquals(expected, gameDAO.getGame(gameID).game());
         assertAllQuiet();
@@ -319,29 +328,4 @@ public class WebSocketMoveTests extends WebSocketEndpointTestSupport {
         return "" + (char) ('a' + position.getColumn() - 1) + position.getRow();
     }
 
-    private static final class ControlledGameDAO extends MemoryGameDAO {
-        private volatile boolean failUpdates;
-        private final AtomicBoolean blockNextUpdate = new AtomicBoolean();
-        private final CountDownLatch saveStarted = new CountDownLatch(1);
-        private final CountDownLatch allowSave = new CountDownLatch(1);
-
-        @Override
-        public void updateGame(GameData game) throws DataAccessException {
-            if (blockNextUpdate.compareAndSet(true, false)) {
-                saveStarted.countDown();
-                try {
-                    if (!allowSave.await(5, TimeUnit.SECONDS)) {
-                        throw new DataAccessException("Timed out waiting to save the game.");
-                    }
-                } catch (InterruptedException exception) {
-                    Thread.currentThread().interrupt();
-                    throw new DataAccessException("Interrupted while saving the game.", exception);
-                }
-            }
-            if (failUpdates) {
-                throw new DataAccessException("Unable to save the game.");
-            }
-            super.updateGame(game);
-        }
-    }
 }

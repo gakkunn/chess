@@ -77,13 +77,36 @@ public class GameplayService {
             GameData storedGame = player.game();
             ChessGame updatedGame = new ChessGame(storedGame.game());
             updatedGame.makeMove(request.move());
+            String statusMessage = updateGameStatus(updatedGame, storedGame);
             GameData updatedData = new GameData(
                     storedGame.gameID(), storedGame.whiteUsername(), storedGame.blackUsername(),
                     storedGame.gameName(), updatedGame);
             gameDAO.updateGame(updatedData);
 
-            return new MakeMoveResult(player.username(), updatedData);
+            return new MakeMoveResult(player.username(), updatedData, statusMessage);
         }
+    }
+
+    private String updateGameStatus(ChessGame game, GameData storedGame) {
+        ChessGame.TeamColor nextTeam = game.getTeamTurn();
+        String player = nextTeam == ChessGame.TeamColor.WHITE
+                ? storedGame.whiteUsername() : storedGame.blackUsername();
+        if (player == null) {
+            player = nextTeam + " player";
+        }
+
+        if (game.isInCheckmate(nextTeam)) {
+            game.endGame();
+            return player + " is in checkmate. The game is over.";
+        }
+        if (game.isInStalemate(nextTeam)) {
+            game.endGame();
+            return "Stalemate: " + player + " has no legal moves. The game is a draw.";
+        }
+        if (game.isInCheck(nextTeam)) {
+            return player + " is in check.";
+        }
+        return null;
     }
 
     private void requireCurrentPlayer(ConnectGameResult player) throws InvalidMoveException {

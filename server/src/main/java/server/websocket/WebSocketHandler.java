@@ -93,6 +93,9 @@ public final class WebSocketHandler {
         connections.broadcast(command.getGameID(), new LoadGameMessage(result.game().game()), null);
         connections.broadcast(command.getGameID(),
                 new NotificationMessage(describeMove(result.username(), command.getMove())), session);
+        if (result.statusMessage() != null) {
+            connections.broadcast(command.getGameID(), new NotificationMessage(result.statusMessage()), null);
+        }
     }
 
     private String describeMove(String username, ChessMove move) {

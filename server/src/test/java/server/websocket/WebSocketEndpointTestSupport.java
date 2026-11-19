@@ -1,6 +1,8 @@
 package server.websocket;
 
 import chess.ChessGame;
+import dataaccess.AuthDAO;
+import dataaccess.DataAccessException;
 import dataaccess.GameDAO;
 import dataaccess.MemoryAuthDAO;
 import dataaccess.MemoryGameDAO;
@@ -35,15 +37,15 @@ abstract class WebSocketEndpointTestSupport {
     protected final WebSocketMessageCodec codec = new WebSocketMessageCodec();
     protected final List<SocketClient> clients = new ArrayList<>();
     protected HttpClient httpClient;
-    protected MemoryAuthDAO authDAO;
-    protected MemoryGameDAO gameDAO;
+    protected AuthDAO authDAO;
+    protected GameDAO gameDAO;
     protected Server server;
     protected URI serverUri;
     protected int gameID;
 
     @BeforeEach
     public void setUp() throws Exception {
-        authDAO = new MemoryAuthDAO();
+        authDAO = createAuthDAO();
         gameDAO = createGameDAO();
         authDAO.createAuth(new AuthData("white-token", "white"));
         authDAO.createAuth(new AuthData("black-token", "black"));
@@ -54,7 +56,11 @@ abstract class WebSocketEndpointTestSupport {
         startServer(gameDAO);
     }
 
-    protected MemoryGameDAO createGameDAO() {
+    protected AuthDAO createAuthDAO() throws DataAccessException {
+        return new MemoryAuthDAO();
+    }
+
+    protected GameDAO createGameDAO() {
         return new MemoryGameDAO();
     }
 
@@ -68,8 +74,12 @@ abstract class WebSocketEndpointTestSupport {
     }
 
     protected void startServer(GameDAO games) {
-        server = new Server(new MemoryUserDAO(), authDAO, games);
+        server = createServer(games);
         serverUri = URI.create("http://localhost:" + server.run(0) + "/");
+    }
+
+    protected Server createServer(GameDAO games) {
+        return new Server(new MemoryUserDAO(), authDAO, games);
     }
 
     protected SocketClient openSocket() throws Exception {
