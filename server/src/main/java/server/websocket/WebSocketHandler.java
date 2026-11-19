@@ -1,5 +1,8 @@
 package server.websocket;
 
+import chess.ChessMove;
+import chess.ChessPosition;
+import chess.InvalidMoveException;
 import com.google.gson.JsonParseException;
 import dataaccess.DataAccessException;
 import io.javalin.websocket.WsMessageContext;
@@ -9,8 +12,11 @@ import service.GameplayService;
 import service.exception.BadRequestException;
 import service.exception.UnauthorizedException;
 import service.request.ConnectGameRequest;
+import service.request.MakeMoveRequest;
 import service.result.ConnectGameResult;
+import service.result.MakeMoveResult;
 import websocket.WebSocketMessageCodec;
+import websocket.commands.MakeMoveCommand;
 import websocket.commands.UserGameCommand;
 import websocket.messages.ErrorMessage;
 import websocket.messages.LoadGameMessage;
@@ -35,17 +41,20 @@ public final class WebSocketHandler {
     public void handleMessage(WsMessageContext context) {
         try {
             UserGameCommand command = codec.deserializeCommand(context.message());
-            if (command.getGameID() == null || command.getGameID() <= 0
-                    || command.getCommandType() != UserGameCommand.CommandType.CONNECT) {
+            if (command.getGameID() == null || command.getGameID() <= 0) {
                 throw new BadRequestException();
             }
 
             synchronized (gameLocks.forGame(command.getGameID())) {
-                connect(context.session, command);
+                switch (command.getCommandType()) {
+                    case CONNECT -> connect(context.session, command);
+                    case MAKE_MOVE -> makeMove(context.session, (MakeMoveCommand) command);
+                    default -> throw new BadRequestException();
+                }
             }
         } catch (JsonParseException | BadRequestException exception) {
             connections.send(context.session, new ErrorMessage("bad request"));
-        } catch (UnauthorizedException exception) {
+        } catch (UnauthorizedException | InvalidMoveException exception) {
             connections.send(context.session, new ErrorMessage(exception.getMessage()));
         } catch (DataAccessException | RuntimeException exception) {
             connections.send(context.session, new ErrorMessage("internal server error"));
@@ -71,5 +80,31 @@ public final class WebSocketHandler {
                     new NotificationMessage(result.username() + " connected as " + role + "."),
                     session);
         }
+    }
+
+    private void makeMove(Session session, MakeMoveCommand command)
+            throws BadRequestException, UnauthorizedException, DataAccessException, InvalidMoveException {
+        if (!connections.contains(session, command.getAuthToken(), command.getGameID())) {
+            throw new BadRequestException();
+        }
+
+        MakeMoveResult result = gameplayService.makeMove(
+                new MakeMoveRequest(command.getAuthToken(), command.getGameID(), command.getMove()));
+        connections.broadcast(command.getGameID(), new LoadGameMessage(result.game().game()), null);
+        connections.broadcast(command.getGameID(),
+                new NotificationMessage(describeMove(result.username(), command.getMove())), session);
+    }
+
+    private String describeMove(String username, ChessMove move) {
+        String description = username + " moved " + squareName(move.getStartPosition())
+                + " to " + squareName(move.getEndPosition());
+        if (move.getPromotionPiece() != null) {
+            description += " and promoted to " + move.getPromotionPiece();
+        }
+        return description + ".";
+    }
+
+    private String squareName(ChessPosition position) {
+        return "" + (char) ('a' + position.getColumn() - 1) + position.getRow();
     }
 }

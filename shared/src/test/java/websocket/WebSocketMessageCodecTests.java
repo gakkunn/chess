@@ -229,6 +229,17 @@ public class WebSocketMessageCodecTests {
     }
 
     @ParameterizedTest
+    @ValueSource(strings = {"\"DRAGON\"", "17", "{}", "\"\""})
+    public void unknownPromotionIsRejectedInsteadOfBeingTreatedAsNoPromotion(String promotionJson) {
+        JsonObject object = parse(codec.serialize(new MakeMoveCommand(
+                "token", 1, new ChessMove(position(2, 5), position(4, 5), null))));
+        object.getAsJsonObject("move").add("promotionPiece", JsonParser.parseString(promotionJson));
+
+        Assertions.assertThrows(JsonParseException.class,
+                () -> codec.deserializeCommand(object.toString()));
+    }
+
+    @ParameterizedTest
     @MethodSource("invalidMessagePayloads")
     public void serverMessagesRequireTheirPayload(String json) {
         Assertions.assertThrows(JsonParseException.class, () -> codec.deserializeMessage(json));

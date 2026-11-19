@@ -1,6 +1,7 @@
 package websocket;
 
 import chess.ChessGame;
+import chess.ChessPiece;
 import com.google.gson.Gson;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
@@ -39,6 +40,9 @@ public final class WebSocketMessageCodec {
             JsonObject move = requireObject(object, "move");
             requireObject(move, "startPosition");
             requireObject(move, "endPosition");
+            if (move.has("promotionPiece") && !move.get("promotionPiece").isJsonNull()) {
+                readType(move, "promotionPiece", ChessPiece.PieceType.class);
+            }
             return serializer.fromJson(object, MakeMoveCommand.class);
         }
 

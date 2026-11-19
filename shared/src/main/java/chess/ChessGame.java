@@ -23,6 +23,15 @@ public class ChessGame {
     }
 
     /**
+     * Copies the board, turn, and completion state without sharing mutable state.
+     */
+    public ChessGame(ChessGame source) {
+        board = new ChessBoard(source.board);
+        teamTurn = source.teamTurn;
+        gameOver = source.gameOver;
+    }
+
+    /**
      * @return Which team's turn it is
      */
     public TeamColor getTeamTurn() {

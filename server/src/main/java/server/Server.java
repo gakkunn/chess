@@ -44,7 +44,7 @@ public class Server {
         ClearService clearService = new ClearService(userDAO, authDAO, gameDAO);
         UserService userService = new UserService(userDAO, authDAO);
         GameService gameService = new GameService(authDAO, gameDAO, gameLocks);
-        GameplayService gameplayService = new GameplayService(authDAO, gameDAO);
+        GameplayService gameplayService = new GameplayService(authDAO, gameDAO, gameLocks);
         ClearHandler clearHandler = new ClearHandler(clearService, serializer);
         UserHandler userHandler = new UserHandler(userService, serializer);
         GameHandler gameHandler = new GameHandler(gameService, serializer);
