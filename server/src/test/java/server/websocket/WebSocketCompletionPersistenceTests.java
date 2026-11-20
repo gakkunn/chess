@@ -3,49 +3,17 @@ package server.websocket;
 import chess.ChessGame;
 import chess.ChessMove;
 import chess.ChessPosition;
-import dataaccess.AuthDAO;
-import dataaccess.DataAccessException;
-import dataaccess.GameDAO;
 import dataaccess.sql.SQLAuthDAO;
-import dataaccess.sql.SQLDatabaseInitializer;
 import dataaccess.sql.SQLGameDAO;
-import dataaccess.sql.SQLUserDAO;
 import model.GameData;
-import model.UserData;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
-import server.Server;
 import testutil.GameplayPositions;
 import websocket.commands.MakeMoveCommand;
 import websocket.messages.LoadGameMessage;
 import websocket.messages.NotificationMessage;
 
-import java.util.List;
-
-public class WebSocketCompletionPersistenceTests extends WebSocketEndpointTestSupport {
-
-    @Override
-    protected AuthDAO createAuthDAO() throws DataAccessException {
-        SQLDatabaseInitializer.initialize();
-        new SQLAuthDAO().clear();
-        new SQLGameDAO().clear();
-        SQLUserDAO users = new SQLUserDAO();
-        users.clear();
-        for (String username : List.of("white", "black", "observer")) {
-            users.createUser(new UserData(username, "password", username + "@example.com"));
-        }
-        return new SQLAuthDAO();
-    }
-
-    @Override
-    protected GameDAO createGameDAO() {
-        return new SQLGameDAO();
-    }
-
-    @Override
-    protected Server createServer(GameDAO games) {
-        return new Server();
-    }
+public class WebSocketCompletionPersistenceTests extends SQLWebSocketTestSupport {
 
     @Test
     public void checkmateRemainsCompletedAfterTheServerRestarts() throws Exception {

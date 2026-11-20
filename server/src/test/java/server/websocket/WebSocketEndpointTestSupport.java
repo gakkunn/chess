@@ -22,6 +22,8 @@ import websocket.messages.ServerMessage;
 
 import java.net.URI;
 import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.net.http.WebSocket;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -95,6 +97,23 @@ abstract class WebSocketEndpointTestSupport {
             throws Exception {
         client.send(new UserGameCommand(UserGameCommand.CommandType.CONNECT, token, requestedGameID));
         return Assertions.assertInstanceOf(LoadGameMessage.class, client.receive());
+    }
+
+    protected void leave(SocketClient client, String token, Integer requestedGameID) throws Exception {
+        client.send(new UserGameCommand(UserGameCommand.CommandType.LEAVE, token, requestedGameID));
+    }
+
+    protected HttpRequest joinRequest(String token, ChessGame.TeamColor color, int requestedGameID) {
+        String json = "{\"playerColor\":\"%s\",\"gameID\":%d}".formatted(color, requestedGameID);
+        return HttpRequest.newBuilder(serverUri.resolve("game"))
+                .header("authorization", token).header("Content-Type", "application/json")
+                .PUT(HttpRequest.BodyPublishers.ofString(json)).build();
+    }
+
+    protected void joinGame(String token, ChessGame.TeamColor color, int requestedGameID) throws Exception {
+        HttpResponse<String> response = httpClient.send(
+                joinRequest(token, color, requestedGameID), HttpResponse.BodyHandlers.ofString());
+        Assertions.assertEquals(200, response.statusCode(), response.body());
     }
 
     protected void assertNotice(SocketClient client, String username, String role) throws Exception {

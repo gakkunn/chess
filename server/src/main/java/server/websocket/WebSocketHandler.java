@@ -12,8 +12,10 @@ import service.GameplayService;
 import service.exception.BadRequestException;
 import service.exception.UnauthorizedException;
 import service.request.ConnectGameRequest;
+import service.request.LeaveGameRequest;
 import service.request.MakeMoveRequest;
 import service.result.ConnectGameResult;
+import service.result.LeaveGameResult;
 import service.result.MakeMoveResult;
 import websocket.WebSocketMessageCodec;
 import websocket.commands.MakeMoveCommand;
@@ -49,6 +51,7 @@ public final class WebSocketHandler {
                 switch (command.getCommandType()) {
                     case CONNECT -> connect(context.session, command);
                     case MAKE_MOVE -> makeMove(context.session, (MakeMoveCommand) command);
+                    case LEAVE -> leave(context.session, command);
                     default -> throw new BadRequestException();
                 }
             }
@@ -84,9 +87,7 @@ public final class WebSocketHandler {
 
     private void makeMove(Session session, MakeMoveCommand command)
             throws BadRequestException, UnauthorizedException, DataAccessException, InvalidMoveException {
-        if (!connections.contains(session, command.getAuthToken(), command.getGameID())) {
-            throw new BadRequestException();
-        }
+        requireConnection(session, command);
 
         MakeMoveResult result = gameplayService.makeMove(
                 new MakeMoveRequest(command.getAuthToken(), command.getGameID(), command.getMove()));
@@ -95,6 +96,22 @@ public final class WebSocketHandler {
                 new NotificationMessage(describeMove(result.username(), command.getMove())), session);
         if (result.statusMessage() != null) {
             connections.broadcast(command.getGameID(), new NotificationMessage(result.statusMessage()), null);
+        }
+    }
+
+    private void leave(Session session, UserGameCommand command)
+            throws BadRequestException, UnauthorizedException, DataAccessException {
+        requireConnection(session, command);
+        LeaveGameResult result = gameplayService.leave(
+                new LeaveGameRequest(command.getAuthToken(), command.getGameID()));
+        connections.remove(session);
+        connections.broadcast(command.getGameID(),
+                new NotificationMessage(result.username() + " left the game."), session);
+    }
+
+    private void requireConnection(Session session, UserGameCommand command) throws BadRequestException {
+        if (!connections.contains(session, command.getAuthToken(), command.getGameID())) {
+            throw new BadRequestException();
         }
     }
 

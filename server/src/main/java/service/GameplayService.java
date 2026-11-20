@@ -12,8 +12,10 @@ import model.GameData;
 import service.exception.BadRequestException;
 import service.exception.UnauthorizedException;
 import service.request.ConnectGameRequest;
+import service.request.LeaveGameRequest;
 import service.request.MakeMoveRequest;
 import service.result.ConnectGameResult;
+import service.result.LeaveGameResult;
 import service.result.MakeMoveResult;
 
 public class GameplayService {
@@ -84,6 +86,32 @@ public class GameplayService {
             gameDAO.updateGame(updatedData);
 
             return new MakeMoveResult(player.username(), updatedData, statusMessage);
+        }
+    }
+
+    public LeaveGameResult leave(LeaveGameRequest request)
+            throws BadRequestException, UnauthorizedException, DataAccessException {
+        if (request == null || request.gameID() == null || request.gameID() <= 0) {
+            throw new BadRequestException();
+        }
+
+        synchronized (gameLocks.forGame(request.gameID())) {
+            ConnectGameResult participant = connect(
+                    new ConnectGameRequest(request.authToken(), request.gameID()));
+            GameData storedGame = participant.game();
+            String username = participant.username();
+            boolean leavesWhite = username.equals(storedGame.whiteUsername());
+            boolean leavesBlack = username.equals(storedGame.blackUsername());
+
+            if (leavesWhite || leavesBlack) {
+                gameDAO.updateGame(new GameData(
+                        storedGame.gameID(),
+                        leavesWhite ? null : storedGame.whiteUsername(),
+                        leavesBlack ? null : storedGame.blackUsername(),
+                        storedGame.gameName(), storedGame.game()));
+            }
+
+            return new LeaveGameResult(username);
         }
     }
 
