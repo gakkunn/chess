@@ -103,6 +103,10 @@ abstract class WebSocketEndpointTestSupport {
         client.send(new UserGameCommand(UserGameCommand.CommandType.LEAVE, token, requestedGameID));
     }
 
+    protected void resign(SocketClient client, String token, Integer requestedGameID) throws Exception {
+        client.send(new UserGameCommand(UserGameCommand.CommandType.RESIGN, token, requestedGameID));
+    }
+
     protected HttpRequest joinRequest(String token, ChessGame.TeamColor color, int requestedGameID) {
         String json = "{\"playerColor\":\"%s\",\"gameID\":%d}".formatted(color, requestedGameID);
         return HttpRequest.newBuilder(serverUri.resolve("game"))

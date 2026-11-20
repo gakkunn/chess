@@ -14,9 +14,11 @@ import service.exception.UnauthorizedException;
 import service.request.ConnectGameRequest;
 import service.request.LeaveGameRequest;
 import service.request.MakeMoveRequest;
+import service.request.ResignGameRequest;
 import service.result.ConnectGameResult;
 import service.result.LeaveGameResult;
 import service.result.MakeMoveResult;
+import service.result.ResignGameResult;
 import websocket.WebSocketMessageCodec;
 import websocket.commands.MakeMoveCommand;
 import websocket.commands.UserGameCommand;
@@ -52,7 +54,7 @@ public final class WebSocketHandler {
                     case CONNECT -> connect(context.session, command);
                     case MAKE_MOVE -> makeMove(context.session, (MakeMoveCommand) command);
                     case LEAVE -> leave(context.session, command);
-                    default -> throw new BadRequestException();
+                    case RESIGN -> resign(context.session, command);
                 }
             }
         } catch (JsonParseException | BadRequestException exception) {
@@ -107,6 +109,15 @@ public final class WebSocketHandler {
         connections.remove(session);
         connections.broadcast(command.getGameID(),
                 new NotificationMessage(result.username() + " left the game."), session);
+    }
+
+    private void resign(Session session, UserGameCommand command)
+            throws BadRequestException, UnauthorizedException, DataAccessException, InvalidMoveException {
+        requireConnection(session, command);
+        ResignGameResult result = gameplayService.resign(
+                new ResignGameRequest(command.getAuthToken(), command.getGameID()));
+        connections.broadcast(command.getGameID(),
+                new NotificationMessage(result.username() + " resigned. The game is over."), null);
     }
 
     private void requireConnection(Session session, UserGameCommand command) throws BadRequestException {

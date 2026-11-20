@@ -14,9 +14,11 @@ import service.exception.UnauthorizedException;
 import service.request.ConnectGameRequest;
 import service.request.LeaveGameRequest;
 import service.request.MakeMoveRequest;
+import service.request.ResignGameRequest;
 import service.result.ConnectGameResult;
 import service.result.LeaveGameResult;
 import service.result.MakeMoveResult;
+import service.result.ResignGameResult;
 
 public class GameplayService {
 
@@ -115,6 +117,27 @@ public class GameplayService {
         }
     }
 
+    public ResignGameResult resign(ResignGameRequest request)
+            throws BadRequestException, UnauthorizedException, DataAccessException, InvalidMoveException {
+        if (request == null || request.gameID() == null || request.gameID() <= 0) {
+            throw new BadRequestException();
+        }
+
+        synchronized (gameLocks.forGame(request.gameID())) {
+            ConnectGameResult player = connect(
+                    new ConnectGameRequest(request.authToken(), request.gameID()));
+            requireActivePlayer(player, "resign");
+            GameData storedGame = player.game();
+            ChessGame completedGame = new ChessGame(storedGame.game());
+            completedGame.endGame();
+            gameDAO.updateGame(new GameData(
+                    storedGame.gameID(), storedGame.whiteUsername(), storedGame.blackUsername(),
+                    storedGame.gameName(), completedGame));
+
+            return new ResignGameResult(player.username());
+        }
+    }
+
     private String updateGameStatus(ChessGame game, GameData storedGame) {
         ChessGame.TeamColor nextTeam = game.getTeamTurn();
         String player = nextTeam == ChessGame.TeamColor.WHITE
@@ -138,19 +161,22 @@ public class GameplayService {
     }
 
     private void requireCurrentPlayer(ConnectGameResult player) throws InvalidMoveException {
-        if (player.playerColor() == null) {
-            throw new InvalidMoveException("Observers cannot make moves");
-        }
-
+        requireActivePlayer(player, "make moves");
         GameData game = player.game();
-        if (game.game().isGameOver()) {
-            throw new InvalidMoveException("The game is over");
-        }
-
         String currentPlayer = game.game().getTeamTurn() == ChessGame.TeamColor.WHITE
                 ? game.whiteUsername() : game.blackUsername();
         if (!player.username().equals(currentPlayer)) {
             throw new InvalidMoveException("It is not your turn");
+        }
+    }
+
+    private void requireActivePlayer(ConnectGameResult player, String action) throws InvalidMoveException {
+        if (player.playerColor() == null) {
+            throw new InvalidMoveException("Observers cannot " + action);
+        }
+
+        if (player.game().game().isGameOver()) {
+            throw new InvalidMoveException("The game is over");
         }
     }
 
