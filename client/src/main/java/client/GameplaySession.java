@@ -1,6 +1,8 @@
 package client;
 
 import chess.ChessGame;
+import chess.ChessMove;
+import chess.ChessPiece;
 import model.AuthData;
 import ui.BoardRenderer;
 import websocket.messages.ErrorMessage;
@@ -39,6 +41,100 @@ final class GameplaySession {
             }
             return active.game == null || active.closing ? ClientState.CONNECTING : ClientState.IN_GAME;
         }
+    }
+
+    String evaluate(String command, String[] tokens) {
+        return switch (command) {
+            case "redraw" -> redraw(tokens);
+            case "move" -> makeMove(tokens);
+            default -> "Unknown command. Type 'help' to see available commands.";
+        };
+    }
+
+    String help() {
+        synchronized (lock) {
+            String moveHelp = active != null && active.target.color != null
+                    ? "  move <from> <to> [" + MoveParser.PROMOTION_CHOICES + "] - Make a move"
+                    + System.lineSeparator()
+                    + "    Use squares a1-h8, e.g. move e2 e4. Choose a piece when promoting a pawn."
+                    + System.lineSeparator() : "";
+            return "Available commands:" + System.lineSeparator()
+                    + "  redraw - Redraw the current chess board" + System.lineSeparator()
+                    + moveHelp
+                    + "  help - Show available commands" + System.lineSeparator()
+                    + "  quit - Exit the chess client";
+        }
+    }
+
+    private String redraw(String[] tokens) {
+        if (tokens.length != 1) {
+            return "Usage: redraw";
+        }
+        synchronized (lock) {
+            if (!hasBoard()) {
+                return "No game board is available. " + RECONNECT_HINT;
+            }
+            return renderer.render(active.game.getBoard(), active.target.perspective());
+        }
+    }
+
+    private String makeMove(String[] tokens) {
+        ChessMove move;
+        try {
+            move = MoveParser.parse(tokens);
+        } catch (IllegalArgumentException exception) {
+            return exception.getMessage();
+        }
+        Connection connection;
+        synchronized (lock) {
+            if (!hasBoard()) {
+                return "No game board is available. " + RECONNECT_HINT;
+            }
+            connection = active;
+            String error = validateMove(connection, move, tokens);
+            if (error != null) {
+                return error;
+            }
+        }
+        try {
+            Target target = connection.target;
+            facade.makeMove(target.auth.authToken(), target.game.gameID(), move);
+            return "Move submitted.";
+        } catch (ServerFacadeException exception) {
+            return finishFailure(connection, false) ? exception.getMessage() + " " + RECONNECT_HINT : "";
+        }
+    }
+
+    private boolean hasBoard() {
+        return active != null && !active.closing && active.game != null;
+    }
+
+    private String validateMove(Connection connection, ChessMove move, String[] tokens) {
+        ChessGame game = connection.game;
+        ChessGame.TeamColor color = connection.target.color;
+        if (color == null) {
+            return "Observers cannot make moves.";
+        }
+        if (game.isGameOver()) {
+            return "The game is over. You can still redraw the board.";
+        }
+        if (game.getTeamTurn() != color) {
+            return "It is not your turn.";
+        }
+        ChessPiece piece = game.getBoard().getPiece(move.getStartPosition());
+        if (piece == null || piece.getTeamColor() != color) {
+            return "Choose one of your own pieces.";
+        }
+        boolean promotes = piece.getPieceType() == ChessPiece.PieceType.PAWN
+                && move.getEndPosition().getRow() == (color == ChessGame.TeamColor.WHITE ? 8 : 1);
+        if (promotes && move.getPromotionPiece() == null) {
+            return "Choose a promotion piece: move " + tokens[1] + " " + tokens[2]
+                    + " <" + MoveParser.PROMOTION_CHOICES + ">.";
+        }
+        if (!promotes && move.getPromotionPiece() != null) {
+            return "Only a pawn reaching the last rank can promote.";
+        }
+        return null;
     }
 
     String connect(AuthData auth, GameSummary game, ChessGame.TeamColor color) {
@@ -101,9 +197,8 @@ final class GameplaySession {
                 connection.game = new ChessGame(load.getGame());
                 connection.loaded.complete(null);
                 Target target = connection.target;
-                ChessGame.TeamColor perspective = target.color == null ? ChessGame.TeamColor.WHITE : target.color;
                 text = (firstBoard ? target.description() + System.lineSeparator() : "")
-                        + renderer.render(connection.game.getBoard(), perspective);
+                        + renderer.render(connection.game.getBoard(), target.perspective());
             } else if (message instanceof NotificationMessage notification) {
                 text = notification.getMessage();
             } else {
@@ -178,6 +273,10 @@ final class GameplaySession {
     }
 
     private record Target(AuthData auth, GameSummary game, ChessGame.TeamColor color) {
+        ChessGame.TeamColor perspective() {
+            return color == null ? ChessGame.TeamColor.WHITE : color;
+        }
+
         String description() {
             return color == null ? "Observing '" + game.gameName() + "'."
                     : "Joined '" + game.gameName() + "' as " + color + ".";

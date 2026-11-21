@@ -119,6 +119,28 @@ public class ReplGameplayTests {
         Assertions.assertFalse(clientFacade.isConnected());
     }
 
+    @Test
+    void terminalAcceptsHelpRedrawAndMoveCommandsDuringGameplay() throws Exception {
+        type("login white password\nlist\nplay 1 WHITE\n");
+        output.await("[IN_GAME] >>> ", 0);
+        int beforeCommands = output.size();
+
+        type("help\nredraw\nmove E2 e4\n");
+        output.await("move <from> <to>", beforeCommands);
+        output.await(new BoardRenderer().renderWhite(new ChessGame().getBoard()), beforeCommands);
+        output.await("Move submitted.", beforeCommands);
+        ChessGame updated = new ChessGame();
+        updated.makeMove(new ChessMove(new ChessPosition(2, 5), new ChessPosition(4, 5), null));
+        output.await(new BoardRenderer().renderWhite(updated.getBoard()), beforeCommands);
+
+        int beforeInvalid = output.size();
+        type("move i2 e4\n");
+        output.await("Use board squares a1 through h8", beforeInvalid);
+        Assertions.assertEquals(ClientState.IN_GAME, client.getState());
+        type("quit\n");
+        repl.get(4, TimeUnit.SECONDS);
+    }
+
     private void type(String commands) throws Exception {
         keyboard.write(commands.getBytes(StandardCharsets.UTF_8));
         keyboard.flush();
