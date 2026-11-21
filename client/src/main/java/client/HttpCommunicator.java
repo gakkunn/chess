@@ -11,13 +11,14 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 
-final class HttpCommunicator {
+final class HttpCommunicator implements AutoCloseable {
 
     private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(5);
 
     private final URI serverUri;
     private final HttpClient httpClient;
     private final Gson serializer;
+    private volatile boolean closed;
 
     HttpCommunicator(String serverUrl) {
         serverUri = createServerUri(serverUrl);
@@ -33,6 +34,9 @@ final class HttpCommunicator {
             Object requestBody,
             String authToken,
             Class<T> responseType) throws ServerFacadeException {
+        if (closed) {
+            throw new ServerFacadeException("The chess client is closed.");
+        }
         HttpRequest request = buildRequest(method, path, requestBody, authToken);
         HttpResponse<String> response = send(request);
 
@@ -41,6 +45,16 @@ final class HttpCommunicator {
         }
 
         return readResponseBody(response.body(), responseType);
+    }
+
+    URI serverUri() {
+        return serverUri;
+    }
+
+    @Override
+    public void close() {
+        closed = true;
+        httpClient.close();
     }
 
     private HttpRequest buildRequest(
@@ -89,6 +103,10 @@ final class HttpCommunicator {
         } catch (IOException exception) {
             throw new ServerFacadeException(
                     "Unable to reach the chess server.",
+                    exception);
+        } catch (IllegalStateException exception) {
+            throw new ServerFacadeException(
+                    closed ? "The chess client is closed." : "Unable to reach the chess server.",
                     exception);
         }
     }

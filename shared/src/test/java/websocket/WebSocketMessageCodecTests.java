@@ -7,8 +7,10 @@ import chess.ChessPiece;
 import chess.ChessPosition;
 import chess.InvalidMoveException;
 import com.google.gson.JsonObject;
+import com.google.gson.JsonNull;
 import com.google.gson.JsonParseException;
 import com.google.gson.JsonParser;
+import com.google.gson.JsonPrimitive;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -243,6 +245,25 @@ public class WebSocketMessageCodecTests {
     @MethodSource("invalidMessagePayloads")
     public void serverMessagesRequireTheirPayload(String json) {
         Assertions.assertThrows(JsonParseException.class, () -> codec.deserializeMessage(json));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"rows", "columns", "null-row", "piece", "color", "type", "completion"})
+    public void malformedBoardsAndCompletionFlagsAreRejected(String corruption) {
+        JsonObject object = parse(codec.serialize(new LoadGameMessage(new ChessGame())));
+        JsonObject game = object.getAsJsonObject("game");
+        var rows = game.getAsJsonObject("board").getAsJsonArray("squares");
+        switch (corruption) {
+            case "rows" -> rows.remove(0);
+            case "columns" -> rows.get(0).getAsJsonArray().remove(0);
+            case "null-row" -> rows.set(0, JsonNull.INSTANCE);
+            case "piece" -> rows.get(0).getAsJsonArray().set(0, new JsonPrimitive("rook"));
+            case "color" -> rows.get(0).getAsJsonArray().get(0).getAsJsonObject().addProperty("teamColor", "GREEN");
+            case "type" -> rows.get(0).getAsJsonArray().get(0).getAsJsonObject().remove("pieceType");
+            default -> game.addProperty("gameOver", "not-a-boolean");
+        }
+
+        Assertions.assertThrows(JsonParseException.class, () -> codec.deserializeMessage(object.toString()));
     }
 
     private static Stream<String> invalidMessagePayloads() {

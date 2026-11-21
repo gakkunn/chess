@@ -73,8 +73,26 @@ public final class WebSocketMessageCodec {
         JsonObject board = requireObject(game, "board");
         JsonElement squares = board.get("squares");
 
-        if (squares == null || !squares.isJsonArray()) {
-            throw new JsonParseException("The game must contain board squares.");
+        if (squares == null || !squares.isJsonArray() || squares.getAsJsonArray().size() != 8) {
+            throw new JsonParseException("The game must contain an 8 by 8 board.");
+        }
+        for (JsonElement row : squares.getAsJsonArray()) {
+            if (!row.isJsonArray() || row.getAsJsonArray().size() != 8) {
+                throw new JsonParseException("The game must contain an 8 by 8 board.");
+            }
+            for (JsonElement square : row.getAsJsonArray()) {
+                if (!square.isJsonNull()) {
+                    if (!square.isJsonObject()) {
+                        throw new JsonParseException("A board square must contain a piece or null.");
+                    }
+                    readType(square.getAsJsonObject(), "teamColor", ChessGame.TeamColor.class);
+                    readType(square.getAsJsonObject(), "pieceType", ChessPiece.PieceType.class);
+                }
+            }
+        }
+        JsonElement gameOver = game.get("gameOver");
+        if (gameOver != null && (!gameOver.isJsonPrimitive() || !gameOver.getAsJsonPrimitive().isBoolean())) {
+            throw new JsonParseException("The game completion flag must be a boolean.");
         }
 
         return serializer.fromJson(object, LoadGameMessage.class);

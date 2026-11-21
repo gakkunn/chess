@@ -1,13 +1,17 @@
 package client;
 
 import chess.ChessGame;
+import chess.ChessMove;
 import model.AuthData;
+import websocket.commands.MakeMoveCommand;
+import websocket.commands.UserGameCommand;
 
 import java.util.List;
 
-public class ServerFacade {
+public class ServerFacade implements AutoCloseable {
 
     private final HttpCommunicator communicator;
+    private final WebSocketCommunicator webSocket;
 
     public ServerFacade(int port) {
         this(createLocalServerUrl(port));
@@ -15,6 +19,7 @@ public class ServerFacade {
 
     public ServerFacade(String serverUrl) {
         communicator = new HttpCommunicator(serverUrl);
+        webSocket = new WebSocketCommunicator(communicator.serverUri());
     }
 
     public void clear() throws ServerFacadeException {
@@ -105,6 +110,43 @@ public class ServerFacade {
                 request,
                 authToken,
                 Void.class);
+    }
+
+    /**
+     * Opens the game connection. The board or server rejection arrives through the observer.
+     */
+    public void connectGame(String authToken, int gameID, ServerMessageObserver observer)
+            throws ServerFacadeException {
+        webSocket.connect(new UserGameCommand(UserGameCommand.CommandType.CONNECT, authToken, gameID), observer);
+    }
+
+    public void makeMove(String authToken, int gameID, ChessMove move) throws ServerFacadeException {
+        webSocket.send(new MakeMoveCommand(authToken, gameID, move));
+    }
+
+    public void leaveGame(String authToken, int gameID) throws ServerFacadeException {
+        webSocket.send(new UserGameCommand(UserGameCommand.CommandType.LEAVE, authToken, gameID));
+    }
+
+    public void resignGame(String authToken, int gameID) throws ServerFacadeException {
+        webSocket.send(new UserGameCommand(UserGameCommand.CommandType.RESIGN, authToken, gameID));
+    }
+
+    /**
+     * Reports the WebSocket transport state, independently of game authorization.
+     */
+    public boolean isConnected() {
+        return webSocket.isConnected();
+    }
+
+    public void disconnect() {
+        webSocket.disconnect();
+    }
+
+    @Override
+    public void close() {
+        webSocket.close();
+        communicator.close();
     }
 
     private static String createLocalServerUrl(int port) {
