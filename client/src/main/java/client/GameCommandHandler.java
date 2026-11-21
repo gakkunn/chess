@@ -1,7 +1,7 @@
 package client;
 
 import chess.ChessGame;
-import ui.BoardRenderer;
+import model.AuthData;
 import ui.GameListRenderer;
 
 import java.util.Arrays;
@@ -15,15 +15,15 @@ final class GameCommandHandler {
                     + "Type 'list' to refresh it.";
 
     private final ServerFacade serverFacade;
-    private final BoardRenderer boardRenderer;
+    private final GameplaySession gameplay;
     private final GameListRenderer gameListRenderer;
-    private List<GameSummary> displayedGames;
+    private volatile List<GameSummary> displayedGames;
 
-    GameCommandHandler(ServerFacade serverFacade) {
+    GameCommandHandler(ServerFacade serverFacade, GameplaySession gameplay) {
         this.serverFacade = Objects.requireNonNull(
                 serverFacade,
                 "Server facade cannot be null.");
-        boardRenderer = new BoardRenderer();
+        this.gameplay = gameplay;
         gameListRenderer = new GameListRenderer();
         displayedGames = List.of();
     }
@@ -31,12 +31,12 @@ final class GameCommandHandler {
     String evaluate(
             String command,
             String[] tokens,
-            String authToken) throws ServerFacadeException {
+            AuthData auth) throws ServerFacadeException {
         return switch (command) {
-            case "create" -> createGame(tokens, authToken);
-            case "list" -> listGames(tokens, authToken);
-            case "play" -> playGame(tokens, authToken);
-            case "observe" -> observeGame(tokens);
+            case "create" -> createGame(tokens, auth.authToken());
+            case "list" -> listGames(tokens, auth.authToken());
+            case "play" -> playGame(tokens, auth);
+            case "observe" -> observeGame(tokens, auth);
             default -> throw new IllegalArgumentException(
                     "Unsupported game command: " + command);
         };
@@ -71,7 +71,7 @@ final class GameCommandHandler {
         return gameListRenderer.render(displayedGames);
     }
 
-    private String playGame(String[] tokens, String authToken)
+    private String playGame(String[] tokens, AuthData auth)
             throws ServerFacadeException {
         if (tokens.length != 3) {
             return "Usage: play <number> <WHITE|BLACK>";
@@ -88,10 +88,11 @@ final class GameCommandHandler {
         }
 
         try {
-            serverFacade.joinGame(
-                    authToken,
-                    playerColor,
-                    selectedGame.gameID());
+            String occupant = playerColor == ChessGame.TeamColor.WHITE
+                    ? selectedGame.whiteUsername() : selectedGame.blackUsername();
+            if (!auth.username().equals(occupant)) {
+                serverFacade.joinGame(auth.authToken(), playerColor, selectedGame.gameID());
+            }
         } catch (ServerFacadeException exception) {
             if ("Error: already taken".equals(exception.getMessage())) {
                 return "That color is already taken.";
@@ -101,10 +102,10 @@ final class GameCommandHandler {
         }
 
         clearDisplayedGames();
-        return joinedGameMessage(selectedGame, playerColor);
+        return gameplay.connect(auth, selectedGame, playerColor);
     }
 
-    private String observeGame(String[] tokens) {
+    private String observeGame(String[] tokens, AuthData auth) {
         if (tokens.length != 2) {
             return "Usage: observe <number>";
         }
@@ -114,12 +115,8 @@ final class GameCommandHandler {
             return INVALID_GAME_NUMBER_MESSAGE;
         }
 
-        ChessGame initialGame = new ChessGame();
-        String board = boardRenderer.renderWhite(initialGame.getBoard());
-
-        return "Observing '" + selectedGame.gameName() + "'."
-                + System.lineSeparator()
-                + board;
+        clearDisplayedGames();
+        return gameplay.connect(auth, selectedGame, null);
     }
 
     private GameSummary findDisplayedGame(String gameNumberText) {
@@ -132,11 +129,12 @@ final class GameCommandHandler {
         }
 
         int gameIndex = gameNumber - 1;
-        if (gameIndex < 0 || gameIndex >= displayedGames.size()) {
+        List<GameSummary> snapshot = displayedGames;
+        if (gameIndex < 0 || gameIndex >= snapshot.size()) {
             return null;
         }
 
-        return displayedGames.get(gameIndex);
+        return snapshot.get(gameIndex);
     }
 
     private ChessGame.TeamColor findPlayerColor(String colorText) {
@@ -147,19 +145,5 @@ final class GameCommandHandler {
         }
 
         return null;
-    }
-
-    private String joinedGameMessage(
-            GameSummary selectedGame,
-            ChessGame.TeamColor playerColor) {
-        ChessGame initialGame = new ChessGame();
-        String board = boardRenderer.render(
-                initialGame.getBoard(),
-                playerColor);
-
-        return "Joined '" + selectedGame.gameName() + "' as "
-                + playerColor + "."
-                + System.lineSeparator()
-                + board;
     }
 }

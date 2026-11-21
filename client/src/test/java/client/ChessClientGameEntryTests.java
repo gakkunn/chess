@@ -3,6 +3,7 @@ package client;
 import chess.ChessGame;
 import model.AuthData;
 import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -10,6 +11,9 @@ import org.junit.jupiter.api.Test;
 import server.Server;
 
 import java.util.List;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
 
 public class ChessClientGameEntryTests {
@@ -22,6 +26,7 @@ public class ChessClientGameEntryTests {
 
     private ChessClient client;
     private AuthData verifier;
+    private final BlockingQueue<String> messages = new LinkedBlockingQueue<>();
 
     @BeforeAll
     static void startServer() {
@@ -34,6 +39,7 @@ public class ChessClientGameEntryTests {
     void setUp() throws ServerFacadeException {
         facade.clear();
         client = new ChessClient(facade);
+        client.setNotificationListener(messages::add);
         client.evaluate(
                 "register signed-in-player password player@example.com");
         verifier = facade.login("signed-in-player", "password");
@@ -41,19 +47,26 @@ public class ChessClientGameEntryTests {
 
     @AfterAll
     static void stopServer() {
+        facade.close();
         server.stop();
+    }
+
+    @AfterEach
+    void disconnectClient() {
+        client.close();
     }
 
     @Test
     void playWhiteJoinsSelectedListedGameAndDrawsWhitePerspective()
-            throws ServerFacadeException {
+            throws Exception {
         facade.createGame(verifier.authToken(), "First Match");
         int selectedGameID = facade.createGame(
                 verifier.authToken(),
                 "Selected Match");
         client.evaluate("list");
 
-        String response = client.evaluate("play 2 white");
+        Assertions.assertEquals("Connecting to 'Selected Match'...", client.evaluate("play 2 white"));
+        String response = receivedBoard();
         GameSummary selectedGame = findGame(selectedGameID);
         String plainResponse = plainText(response);
 
@@ -73,13 +86,14 @@ public class ChessClientGameEntryTests {
 
     @Test
     void playBlackJoinsGameAndDrawsBlackPerspective()
-            throws ServerFacadeException {
+            throws Exception {
         int gameID = facade.createGame(
                 verifier.authToken(),
                 "Black Perspective");
         client.evaluate("list");
 
-        String response = client.evaluate("PLAY 1 BLACK");
+        client.evaluate("PLAY 1 BLACK");
+        String response = receivedBoard();
         GameSummary game = findGame(gameID);
         String plainResponse = plainText(response);
 
@@ -191,14 +205,15 @@ public class ChessClientGameEntryTests {
 
     @Test
     void observeDrawsSelectedGameFromWhiteWithoutJoining()
-            throws ServerFacadeException {
+            throws Exception {
         facade.createGame(verifier.authToken(), "First Match");
         int observedGameID = facade.createGame(
                 verifier.authToken(),
                 "Observed Match");
         client.evaluate("list");
 
-        String response = client.evaluate("observe 2");
+        client.evaluate("observe 2");
+        String response = receivedBoard();
         GameSummary observedGame = findGame(observedGameID);
         String plainResponse = plainText(response);
 
@@ -243,6 +258,13 @@ public class ChessClientGameEntryTests {
 
     private String plainText(String text) {
         return ANSI_SEQUENCE.matcher(text).replaceAll("");
+    }
+
+    private String receivedBoard() throws InterruptedException {
+        String message = messages.poll(3, TimeUnit.SECONDS);
+        Assertions.assertNotNull(message, "No game board received.");
+        Assertions.assertEquals(ClientState.IN_GAME, client.getState());
+        return message;
     }
 
     private String invalidGameNumberMessage() {

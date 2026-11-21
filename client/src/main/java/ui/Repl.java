@@ -4,7 +4,9 @@ import client.ChessClient;
 import client.ClientState;
 
 import java.io.PrintStream;
+import java.util.ArrayDeque;
 import java.util.Objects;
+import java.util.Queue;
 import java.util.Scanner;
 
 public class Repl {
@@ -12,6 +14,11 @@ public class Repl {
     private final ChessClient client;
     private final Scanner scanner;
     private final PrintStream output;
+    private final Object outputLock = new Object();
+    private final Queue<String> pendingMessages = new ArrayDeque<>();
+    private boolean processingCommand;
+    private boolean waitingForInput;
+    private boolean running;
 
     public Repl(String serverUrl) {
         this(new ChessClient(serverUrl), new Scanner(System.in), System.out);
@@ -24,21 +31,68 @@ public class Repl {
     }
 
     public void run() {
-        output.println("Welcome to 240 Chess. Type 'help' to get started.");
+        synchronized (outputLock) {
+            running = true;
+            client.setNotificationListener(this::displayNotification);
+            output.println("Welcome to 240 Chess. Type 'help' to get started.");
+        }
+        try {
+            while (client.getState() != ClientState.QUIT) {
+                synchronized (outputLock) {
+                    waitingForInput = true;
+                    output.print(prompt());
+                    output.flush();
+                }
+                if (!scanner.hasNextLine()) {
+                    synchronized (outputLock) {
+                        output.println();
+                    }
+                    return;
+                }
+                String input = scanner.nextLine();
+                synchronized (outputLock) {
+                    waitingForInput = false;
+                    processingCommand = true;
+                }
+                String response = client.evaluate(input);
+                synchronized (outputLock) {
+                    if (!response.isBlank()) {
+                        output.println(response);
+                    }
+                    processingCommand = false;
+                    while (!pendingMessages.isEmpty()) {
+                        output.println(pendingMessages.remove());
+                    }
+                    output.flush();
+                }
+            }
+        } finally {
+            synchronized (outputLock) {
+                running = false;
+                pendingMessages.clear();
+            }
+            client.setNotificationListener(message -> { });
+            client.close();
+        }
+    }
 
-        while (client.getState() != ClientState.QUIT) {
-            output.print(prompt());
-            output.flush();
-
-            if (!scanner.hasNextLine()) {
-                output.println();
+    private void displayNotification(String message) {
+        synchronized (outputLock) {
+            if (!running || client.getState() == ClientState.QUIT) {
                 return;
             }
-
-            String response = client.evaluate(scanner.nextLine());
-            if (!response.isBlank()) {
-                output.println(response);
+            if (processingCommand) {
+                pendingMessages.add(message);
+                return;
             }
+            if (waitingForInput) {
+                output.println();
+            }
+            output.println(message);
+            if (waitingForInput) {
+                output.print(prompt());
+            }
+            output.flush();
         }
     }
 
@@ -46,6 +100,8 @@ public class Repl {
         return switch (client.getState()) {
             case SIGNED_OUT -> "[SIGNED_OUT] >>> ";
             case SIGNED_IN -> "[SIGNED_IN] >>> ";
+            case CONNECTING -> "[CONNECTING] >>> ";
+            case IN_GAME -> "[IN_GAME] >>> ";
             case QUIT -> "";
         };
     }

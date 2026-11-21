@@ -2,10 +2,12 @@ package client;
 
 import model.AuthData;
 
+import java.time.Duration;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.function.Consumer;
 
-public class ChessClient {
+public class ChessClient implements AutoCloseable {
 
     private static final String PRELOGIN_HELP = String.join(
             System.lineSeparator(),
@@ -22,33 +24,58 @@ public class ChessClient {
             "  list - List available games",
             "  play <number> <WHITE|BLACK> - Join a game",
             "  observe <number> - Observe a game",
+            "  reconnect - Reconnect to the last game",
             "  logout - Sign out",
             "  help - Show available commands",
             "  quit - Exit the chess client");
 
     private final ServerFacade serverFacade;
     private final GameCommandHandler gameCommandHandler;
+    private final GameplaySession gameplay;
+    private final boolean ownsFacade;
+    private final Object commandLock = new Object();
+    private final Object sessionLock = new Object();
+    private volatile Consumer<String> notificationListener = message -> { };
     private ClientState state;
     private AuthData session;
 
     public ChessClient(String serverUrl) {
-        this(new ServerFacade(serverUrl));
+        this(new ServerFacade(serverUrl), true);
     }
 
     public ChessClient(ServerFacade serverFacade) {
+        this(serverFacade, false);
+    }
+
+    private ChessClient(ServerFacade serverFacade, boolean ownsFacade) {
         this.serverFacade = Objects.requireNonNull(
                 serverFacade,
                 "Server facade cannot be null.");
-        gameCommandHandler = new GameCommandHandler(serverFacade);
+        this.ownsFacade = ownsFacade;
+        gameplay = new GameplaySession(serverFacade, message -> notificationListener.accept(message),
+                this::expireSession, Duration.ofSeconds(5));
+        gameCommandHandler = new GameCommandHandler(serverFacade, gameplay);
         state = ClientState.SIGNED_OUT;
     }
 
     public ClientState getState() {
-        return state;
+        synchronized (sessionLock) {
+            return state == ClientState.SIGNED_IN ? gameplay.getState() : state;
+        }
+    }
+
+    public void setNotificationListener(Consumer<String> listener) {
+        notificationListener = Objects.requireNonNull(listener, "Notification listener cannot be null.");
     }
 
     public String evaluate(String input) {
-        if (state == ClientState.QUIT) {
+        synchronized (commandLock) {
+            return evaluateCommand(input);
+        }
+    }
+
+    private String evaluateCommand(String input) {
+        if (getState() == ClientState.QUIT) {
             return "The chess client is closed.";
         }
 
@@ -67,9 +94,11 @@ public class ChessClient {
             return quit(tokens.length);
         }
 
-        return switch (state) {
+        return switch (getState()) {
             case SIGNED_OUT -> evaluatePreloginCommand(command, tokens);
             case SIGNED_IN -> evaluatePostloginCommand(command, tokens);
+            case CONNECTING -> "Waiting for the game board. Type 'help' to see available commands.";
+            case IN_GAME -> unknownCommand();
             case QUIT -> "The chess client is closed.";
         };
     }
@@ -85,6 +114,7 @@ public class ChessClient {
     private String evaluatePostloginCommand(String command, String[] tokens) {
         return switch (command) {
             case "logout" -> logout(tokens);
+            case "reconnect" -> tokens.length == 1 ? gameplay.reconnect() : "Usage: reconnect";
             case "create", "list", "play", "observe" ->
                     evaluateGameCommand(command, tokens);
             default -> unknownCommand();
@@ -93,10 +123,17 @@ public class ChessClient {
 
     private String evaluateGameCommand(String command, String[] tokens) {
         try {
+            AuthData currentSession;
+            synchronized (sessionLock) {
+                currentSession = session;
+            }
+            if (currentSession == null) {
+                return "Your session is no longer valid. Please sign in again.";
+            }
             return gameCommandHandler.evaluate(
                     command,
                     tokens,
-                    session.authToken());
+                    currentSession);
         } catch (ServerFacadeException exception) {
             return authenticatedUserMessage(exception);
         }
@@ -132,9 +169,12 @@ public class ChessClient {
     }
 
     private String beginSession(AuthData authData) {
-        session = authData;
+        gameplay.reset();
         gameCommandHandler.clearDisplayedGames();
-        state = ClientState.SIGNED_IN;
+        synchronized (sessionLock) {
+            session = authData;
+            state = ClientState.SIGNED_IN;
+        }
         return "Signed in as " + authData.username() + ".";
     }
 
@@ -144,7 +184,14 @@ public class ChessClient {
         }
 
         try {
-            serverFacade.logout(session.authToken());
+            AuthData currentSession;
+            synchronized (sessionLock) {
+                currentSession = session;
+            }
+            if (currentSession == null) {
+                return "Your session is no longer valid. Please sign in again.";
+            }
+            serverFacade.logout(currentSession.authToken());
             clearSession();
             return "Signed out.";
         } catch (ServerFacadeException exception) {
@@ -153,9 +200,22 @@ public class ChessClient {
     }
 
     private void clearSession() {
-        session = null;
+        gameplay.reset();
         gameCommandHandler.clearDisplayedGames();
-        state = ClientState.SIGNED_OUT;
+        synchronized (sessionLock) {
+            session = null;
+            state = ClientState.SIGNED_OUT;
+        }
+    }
+
+    private void expireSession(String authToken) {
+        synchronized (sessionLock) {
+            if (session != null && session.authToken().equals(authToken) && state != ClientState.QUIT) {
+                session = null;
+                gameCommandHandler.clearDisplayedGames();
+                state = ClientState.SIGNED_OUT;
+            }
+        }
     }
 
     private String showHelp(int tokenCount) {
@@ -163,11 +223,14 @@ public class ChessClient {
             return "Usage: help";
         }
 
-        if (state == ClientState.SIGNED_IN) {
-            return POSTLOGIN_HELP;
-        }
-
-        return PRELOGIN_HELP;
+        return switch (getState()) {
+            case SIGNED_IN -> POSTLOGIN_HELP;
+            case CONNECTING -> "Waiting for the game board." + System.lineSeparator()
+                    + "  help - Show available commands" + System.lineSeparator() + "  quit - Exit the chess client";
+            case IN_GAME -> "Available commands:" + System.lineSeparator()
+                    + "  help - Show available commands" + System.lineSeparator() + "  quit - Exit the chess client";
+            default -> PRELOGIN_HELP;
+        };
     }
 
     private String quit(int tokenCount) {
@@ -175,8 +238,22 @@ public class ChessClient {
             return "Usage: quit";
         }
 
-        state = ClientState.QUIT;
+        close();
         return "Goodbye.";
+    }
+
+    @Override
+    public void close() {
+        synchronized (commandLock) {
+            synchronized (sessionLock) {
+                state = ClientState.QUIT;
+                session = null;
+            }
+            gameplay.reset();
+            if (ownsFacade) {
+                serverFacade.close();
+            }
+        }
     }
 
     private String unknownCommand() {

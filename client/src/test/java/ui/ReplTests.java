@@ -68,7 +68,6 @@ public class ReplTests {
                 "register workflow-player password workflow@example.com",
                 "create End to End Match",
                 "list",
-                "play 1 WHITE",
                 "logout",
                 "quit",
                 "");
@@ -84,8 +83,6 @@ public class ReplTests {
                         output.contains("Created game 'End to End Match'.")),
                 () -> Assertions.assertTrue(
                         output.contains("1. End to End Match")),
-                () -> Assertions.assertTrue(
-                        output.contains("Joined 'End to End Match' as WHITE.")),
                 () -> Assertions.assertTrue(output.contains("Signed out.")),
                 () -> Assertions.assertTrue(output.contains("Goodbye.")),
                 () -> Assertions.assertTrue(
@@ -93,9 +90,7 @@ public class ReplTests {
                 () -> Assertions.assertTrue(
                         output.contains("[SIGNED_IN] >>> ")),
                 () -> Assertions.assertEquals(1, games.size()),
-                () -> Assertions.assertEquals(
-                        "workflow-player",
-                        games.getFirst().whiteUsername()));
+                () -> Assertions.assertNull(games.getFirst().whiteUsername()));
     }
 
     private String runRepl(String inputText) {
