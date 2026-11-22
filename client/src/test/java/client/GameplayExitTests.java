@@ -66,6 +66,7 @@ public class GameplayExitTests {
         Assertions.assertTrue(client.evaluate("yes").contains("no resignation"));
         Assertions.assertTrue(client.evaluate("resign").contains("Type 'yes'"));
         Assertions.assertTrue(client.evaluate("help").contains("Type 'yes'"));
+        Assertions.assertTrue(client.evaluate("highlight e2").startsWith("Selected e2"));
         Assertions.assertTrue(client.evaluate("yes extra").contains("only 'yes' or 'no'"));
         Assertions.assertTrue(client.evaluate("move e2 e4").contains("Type 'yes'"));
         Assertions.assertEquals("Resignation cancelled.", client.evaluate("NO"));

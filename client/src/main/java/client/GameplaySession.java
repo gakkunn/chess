@@ -3,7 +3,6 @@ package client;
 import chess.ChessGame;
 import chess.ChessMove;
 import model.AuthData;
-import ui.BoardRenderer;
 import websocket.messages.ErrorMessage;
 import websocket.messages.LoadGameMessage;
 import websocket.messages.NotificationMessage;
@@ -22,7 +21,7 @@ final class GameplaySession {
     private final Consumer<String> output;
     private final Consumer<String> expiredSession;
     private final Duration loadTimeout;
-    private final BoardRenderer renderer = new BoardRenderer();
+    private final GameBoardView boardView = new GameBoardView();
     private final Object lock = new Object();
     private Connection active;
     private Target resumable;
@@ -46,12 +45,12 @@ final class GameplaySession {
     String evaluate(String command, String[] tokens) {
         synchronized (lock) {
             if (active != null && active.confirmResign && !command.equals("yes") && !command.equals("no")
-                    && !command.equals("redraw") && !command.equals("leave")) {
+                    && !command.equals("redraw") && !command.equals("highlight") && !command.equals("leave")) {
                 return CONFIRM_RESIGN;
             }
         }
         return switch (command) {
-            case "redraw" -> redraw(tokens);
+            case "redraw", "highlight" -> displayBoard(command, tokens);
             case "move" -> makeMove(tokens);
             case "leave" -> tokens.length == 1 ? depart(false) : "Usage: leave";
             case "resign" -> resign(tokens);
@@ -70,6 +69,7 @@ final class GameplaySession {
                     + System.lineSeparator() : "";
             return "Available commands:" + System.lineSeparator()
                     + "  redraw - Redraw the current chess board" + System.lineSeparator()
+                    + "  highlight <square> - Highlight a piece and its legal moves" + System.lineSeparator()
                     + moveHelp
                     + "  leave - Leave the game" + System.lineSeparator()
                     + "  help - Show available commands" + System.lineSeparator()
@@ -78,15 +78,12 @@ final class GameplaySession {
         }
     }
 
-    private String redraw(String[] tokens) {
-        if (tokens.length != 1) {
-            return "Usage: redraw";
-        }
+    private String displayBoard(String command, String[] tokens) {
         synchronized (lock) {
             if (!hasBoard()) {
                 return "No game board is available. " + RECONNECT_HINT;
             }
-            return renderer.render(active.game.getBoard(), active.target.perspective());
+            return boardView.evaluate(command, tokens, active.game, active.target.perspective());
         }
     }
 
@@ -274,7 +271,7 @@ final class GameplaySession {
                 connection.loaded.complete(null);
                 Target target = connection.target;
                 text = (firstBoard ? target.description() + System.lineSeparator() : "")
-                        + renderer.render(connection.game.getBoard(), target.perspective());
+                        + boardView.render(connection.game, target.perspective());
             } else if (message instanceof NotificationMessage notification) {
                 if (notification.isGameOver() && connection.game != null) {
                     connection.game.endGame();

@@ -25,6 +25,7 @@ import java.io.PipedOutputStream;
 import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
 import java.util.Scanner;
+import java.util.Set;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -192,8 +193,11 @@ public class ReplGameplayTests {
         output.await("[IN_GAME] >>> ", 0);
         int beforeCommands = output.size();
 
-        type("help\nredraw\nmove E2 e4\n");
+        type("help\nhighlight E2\nredraw\nmove E2 e4\n");
         output.await("move <from> <to>", beforeCommands);
+        output.await("highlight <square>", beforeCommands);
+        output.await(new BoardRenderer().renderHighlighted(new ChessGame().getBoard(), ChessGame.TeamColor.WHITE,
+                new ChessPosition(2, 5), Set.of(new ChessPosition(3, 5), new ChessPosition(4, 5))), beforeCommands);
         output.await(new BoardRenderer().renderWhite(new ChessGame().getBoard()), beforeCommands);
         output.await("Move submitted.", beforeCommands);
         ChessGame updated = new ChessGame();

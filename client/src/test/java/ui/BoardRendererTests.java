@@ -2,12 +2,17 @@ package ui;
 
 import chess.ChessBoard;
 import chess.ChessGame;
+import chess.ChessPiece;
+import chess.ChessPosition;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 
+import java.util.List;
+import java.util.Set;
+import java.util.regex.MatchResult;
 import java.util.regex.Pattern;
 
 public class BoardRendererTests {
@@ -143,6 +148,53 @@ public class BoardRendererTests {
                         lines[8].indexOf(EscapeSequences.SET_BG_COLOR_DARK_GREEN)
                                 < lines[8].indexOf(
                                 EscapeSequences.SET_BG_COLOR_WHITE)));
+    }
+
+    @ParameterizedTest
+    @EnumSource(ChessGame.TeamColor.class)
+    void highlightsUseBoardCoordinatesAndPreservePiecesForEitherPerspective(ChessGame.TeamColor perspective) {
+        ChessPosition selected = new ChessPosition(4, 5);
+        Set<ChessPosition> destinations = Set.of(selected, new ChessPosition(5, 4), new ChessPosition(5, 6));
+        board.addPiece(selected, new ChessPiece(ChessGame.TeamColor.WHITE, ChessPiece.PieceType.BISHOP));
+        board.addPiece(new ChessPosition(5, 4), new ChessPiece(ChessGame.TeamColor.BLACK, ChessPiece.PieceType.ROOK));
+        ChessBoard before = new ChessBoard(board);
+
+        String highlighted = renderer.renderHighlighted(board, perspective, selected, destinations);
+        String[] lines = highlighted.split("\\R");
+        Pattern background = Pattern.compile("\u001B\\[48;5;\\d+m");
+        for (int displayRow = 1; displayRow <= 8; displayRow++) {
+            List<String> colors = background.matcher(lines[displayRow]).results().map(MatchResult::group).toList();
+            Assertions.assertEquals(10, colors.size());
+            for (int displayColumn = 1; displayColumn <= 8; displayColumn++) {
+                int row = perspective == ChessGame.TeamColor.WHITE ? 9 - displayRow : displayRow;
+                int column = perspective == ChessGame.TeamColor.WHITE ? displayColumn : 9 - displayColumn;
+                ChessPosition position = new ChessPosition(row, column);
+                String expected = selected.equals(position) ? EscapeSequences.SET_BG_COLOR_YELLOW
+                        : destinations.contains(position) ? EscapeSequences.SET_BG_COLOR_GREEN
+                        : (row + column) % 2 == 1 ? EscapeSequences.SET_BG_COLOR_WHITE : EscapeSequences.SET_BG_COLOR_DARK_GREEN;
+                Assertions.assertEquals(expected, colors.get(displayColumn), "Incorrect color at " + row + ", " + column);
+            }
+        }
+        Assertions.assertTrue(highlighted.contains(EscapeSequences.SET_BG_COLOR_YELLOW
+                + EscapeSequences.SET_TEXT_COLOR_RED + EscapeSequences.WHITE_BISHOP));
+        Assertions.assertTrue(highlighted.contains(EscapeSequences.SET_BG_COLOR_GREEN
+                + EscapeSequences.SET_TEXT_COLOR_BLUE + EscapeSequences.BLACK_ROOK));
+        Assertions.assertEquals(plainText(renderer.render(board, perspective)), plainText(highlighted));
+        Assertions.assertEquals(before, board);
+        Assertions.assertTrue(highlighted.endsWith(EscapeSequences.RESET_TEXT_COLOR
+                + EscapeSequences.RESET_BG_COLOR + System.lineSeparator()));
+        Assertions.assertFalse(renderer.render(board, perspective).contains(EscapeSequences.SET_BG_COLOR_YELLOW));
+        Assertions.assertFalse(renderer.render(board, perspective).contains(EscapeSequences.SET_BG_COLOR_GREEN));
+    }
+
+    @ParameterizedTest
+    @EnumSource(ChessGame.TeamColor.class)
+    void aPieceWithNoDestinationsStillHasItsSelectedSquareHighlighted(ChessGame.TeamColor perspective) {
+        String rendered = renderer.renderHighlighted(board, perspective, new ChessPosition(1, 1), Set.of());
+
+        Assertions.assertEquals(1, countOccurrences(rendered, EscapeSequences.SET_BG_COLOR_YELLOW));
+        Assertions.assertEquals(0, countOccurrences(rendered, EscapeSequences.SET_BG_COLOR_GREEN));
+        Assertions.assertEquals(plainText(renderer.render(board, perspective)), plainText(rendered));
     }
 
     private String plainText(String renderedBoard) {

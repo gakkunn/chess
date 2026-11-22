@@ -5,7 +5,10 @@ import chess.ChessGame;
 import chess.ChessPiece;
 import chess.ChessPosition;
 
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 public class BoardRenderer {
 
@@ -19,6 +22,28 @@ public class BoardRenderer {
     public String render(
             ChessBoard board,
             ChessGame.TeamColor perspective) {
+        return render(board, perspective, Map.of());
+    }
+
+    public String renderHighlighted(
+            ChessBoard board,
+            ChessGame.TeamColor perspective,
+            ChessPosition selected,
+            Set<ChessPosition> destinations) {
+        Objects.requireNonNull(selected, "Selected square cannot be null.");
+        Objects.requireNonNull(destinations, "Legal destinations cannot be null.");
+        Map<ChessPosition, String> backgrounds = new HashMap<>();
+        for (ChessPosition destination : destinations) {
+            backgrounds.put(destination, EscapeSequences.SET_BG_COLOR_GREEN);
+        }
+        backgrounds.put(selected, EscapeSequences.SET_BG_COLOR_YELLOW);
+        return render(board, perspective, backgrounds);
+    }
+
+    private String render(
+            ChessBoard board,
+            ChessGame.TeamColor perspective,
+            Map<ChessPosition, String> backgrounds) {
         Objects.requireNonNull(board, "Chess board cannot be null.");
         Objects.requireNonNull(perspective, "Board perspective cannot be null.");
 
@@ -32,7 +57,7 @@ public class BoardRenderer {
 
         for (int index = 0; index < BOARD_SIZE; index++) {
             int row = firstRow + index * rowDirection;
-            appendRow(output, board, row, perspective);
+            appendRow(output, board, row, perspective, backgrounds);
         }
 
         appendColumnLabels(output, perspective);
@@ -66,7 +91,8 @@ public class BoardRenderer {
             StringBuilder output,
             ChessBoard board,
             int row,
-            ChessGame.TeamColor perspective) {
+            ChessGame.TeamColor perspective,
+            Map<ChessPosition, String> backgrounds) {
         appendRowLabel(output, row);
 
         int firstColumn = perspective == ChessGame.TeamColor.WHITE
@@ -76,7 +102,7 @@ public class BoardRenderer {
 
         for (int index = 0; index < BOARD_SIZE; index++) {
             int column = firstColumn + index * columnDirection;
-            appendSquare(output, board, row, column);
+            appendSquare(output, board, row, column, backgrounds);
         }
 
         appendRowLabel(output, row);
@@ -96,10 +122,10 @@ public class BoardRenderer {
             StringBuilder output,
             ChessBoard board,
             int row,
-            int column) {
-        output.append(squareBackground(row, column));
-
+            int column,
+            Map<ChessPosition, String> backgrounds) {
         ChessPosition position = new ChessPosition(row, column);
+        output.append(backgrounds.getOrDefault(position, squareBackground(row, column)));
         ChessPiece piece = board.getPiece(position);
 
         if (piece == null) {
