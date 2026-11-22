@@ -62,6 +62,11 @@ public final class WebSocketMessageCodec {
             }
             case NOTIFICATION -> {
                 requireString(object, "message");
+                JsonElement gameOver = object.get("gameOver");
+                if (gameOver != null && !gameOver.isJsonNull()
+                        && (!gameOver.isJsonPrimitive() || !gameOver.getAsJsonPrimitive().isBoolean())) {
+                    throw new JsonParseException("The notification completion flag must be a boolean.");
+                }
                 yield serializer.fromJson(object, NotificationMessage.class);
             }
         };

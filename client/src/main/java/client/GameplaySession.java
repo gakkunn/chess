@@ -2,7 +2,6 @@ package client;
 
 import chess.ChessGame;
 import chess.ChessMove;
-import chess.ChessPiece;
 import model.AuthData;
 import ui.BoardRenderer;
 import websocket.messages.ErrorMessage;
@@ -18,6 +17,7 @@ import java.util.function.Consumer;
 final class GameplaySession {
 
     private static final String RECONNECT_HINT = "Type 'reconnect' to return to the game, or 'list' to choose a game.";
+    private static final String CONFIRM_RESIGN = "Resign this game? Type 'yes' to confirm or 'no' to cancel.";
     private final ServerFacade facade;
     private final Consumer<String> output;
     private final Consumer<String> expiredSession;
@@ -44,9 +44,18 @@ final class GameplaySession {
     }
 
     String evaluate(String command, String[] tokens) {
+        synchronized (lock) {
+            if (active != null && active.confirmResign && !command.equals("yes") && !command.equals("no")
+                    && !command.equals("redraw") && !command.equals("leave")) {
+                return CONFIRM_RESIGN;
+            }
+        }
         return switch (command) {
             case "redraw" -> redraw(tokens);
             case "move" -> makeMove(tokens);
+            case "leave" -> tokens.length == 1 ? depart(false) : "Usage: leave";
+            case "resign" -> resign(tokens);
+            case "yes", "no" -> confirmResignation(command.equals("yes"), tokens);
             default -> "Unknown command. Type 'help' to see available commands.";
         };
     }
@@ -57,12 +66,15 @@ final class GameplaySession {
                     ? "  move <from> <to> [" + MoveParser.PROMOTION_CHOICES + "] - Make a move"
                     + System.lineSeparator()
                     + "    Use squares a1-h8, e.g. move e2 e4. Choose a piece when promoting a pawn."
+                    + System.lineSeparator() + "  resign - Forfeit the game after confirmation"
                     + System.lineSeparator() : "";
             return "Available commands:" + System.lineSeparator()
                     + "  redraw - Redraw the current chess board" + System.lineSeparator()
                     + moveHelp
+                    + "  leave - Leave the game" + System.lineSeparator()
                     + "  help - Show available commands" + System.lineSeparator()
-                    + "  quit - Exit the chess client";
+                    + "  quit - Exit the chess client"
+                    + (active != null && active.confirmResign ? System.lineSeparator() + CONFIRM_RESIGN : "");
         }
     }
 
@@ -91,7 +103,10 @@ final class GameplaySession {
                 return "No game board is available. " + RECONNECT_HINT;
             }
             connection = active;
-            String error = validateMove(connection, move, tokens);
+            if (connection.resigning) {
+                return "Waiting for the server to confirm resignation.";
+            }
+            String error = MoveValidator.validate(connection.game, connection.target.color, move, tokens);
             if (error != null) {
                 return error;
             }
@@ -109,32 +124,89 @@ final class GameplaySession {
         return active != null && !active.closing && active.game != null;
     }
 
-    private String validateMove(Connection connection, ChessMove move, String[] tokens) {
-        ChessGame game = connection.game;
-        ChessGame.TeamColor color = connection.target.color;
-        if (color == null) {
-            return "Observers cannot make moves.";
+    private String resign(String[] tokens) {
+        if (tokens.length != 1) {
+            return "Usage: resign";
         }
-        if (game.isGameOver()) {
-            return "The game is over. You can still redraw the board.";
+        synchronized (lock) {
+            if (!hasBoard()) {
+                return "No game board is available. " + RECONNECT_HINT;
+            }
+            if (active.target.color == null) {
+                return "Observers cannot resign.";
+            }
+            if (active.game.isGameOver()) {
+                return "The game is already over.";
+            }
+            if (active.resigning) {
+                return "Waiting for the server to confirm resignation.";
+            }
+            active.confirmResign = true;
+            return CONFIRM_RESIGN;
         }
-        if (game.getTeamTurn() != color) {
-            return "It is not your turn.";
+    }
+
+    private String confirmResignation(boolean confirmed, String[] tokens) {
+        Connection connection;
+        synchronized (lock) {
+            if (!hasBoard() || !active.confirmResign) {
+                return "There is no resignation to confirm. Type 'resign' first.";
+            }
+            if (tokens.length != 1) {
+                return "Please enter only 'yes' or 'no'.";
+            }
+            connection = active;
+            connection.confirmResign = false;
+            if (!confirmed) {
+                return "Resignation cancelled.";
+            }
+            connection.resigning = true;
         }
-        ChessPiece piece = game.getBoard().getPiece(move.getStartPosition());
-        if (piece == null || piece.getTeamColor() != color) {
-            return "Choose one of your own pieces.";
+        try {
+            Target target = connection.target;
+            facade.resignGame(target.auth.authToken(), target.game.gameID());
+            return "Resignation submitted.";
+        } catch (ServerFacadeException exception) {
+            return finishFailure(connection, false) ? exception.getMessage() + " " + RECONNECT_HINT : "";
         }
-        boolean promotes = piece.getPieceType() == ChessPiece.PieceType.PAWN
-                && move.getEndPosition().getRow() == (color == ChessGame.TeamColor.WHITE ? 8 : 1);
-        if (promotes && move.getPromotionPiece() == null) {
-            return "Choose a promotion piece: move " + tokens[1] + " " + tokens[2]
-                    + " <" + MoveParser.PROMOTION_CHOICES + ">.";
+    }
+
+    String close() {
+        return depart(true);
+    }
+
+    private String depart(boolean quitting) {
+        Connection connection;
+        synchronized (lock) {
+            connection = active != null && !active.closing ? active : null;
+            if (connection != null) {
+                connection.closing = true;
+                connection.loaded.complete(null);
+            } else if (!quitting) {
+                return "There is no active game to leave.";
+            }
         }
-        if (!promotes && move.getPromotionPiece() != null) {
-            return "Only a pawn reaching the last rank can promote.";
+        String error = null;
+        try {
+            if (connection != null) {
+                Target target = connection.target;
+                facade.leaveGame(target.auth.authToken(), target.game.gameID());
+            }
+        } catch (ServerFacadeException exception) {
+            error = exception.getMessage();
+        } finally {
+            facade.disconnect();
+            synchronized (lock) {
+                active = null;
+                if (quitting || error == null) {
+                    resumable = null;
+                }
+            }
         }
-        return null;
+        if (error != null) {
+            return "Could not notify the server that you left: " + error + (quitting ? "" : " " + RECONNECT_HINT);
+        }
+        return quitting ? "" : "Left '" + connection.target.game.gameName() + "'.";
     }
 
     String connect(AuthData auth, GameSummary game, ChessGame.TeamColor color) {
@@ -195,11 +267,20 @@ final class GameplaySession {
             if (message instanceof LoadGameMessage load) {
                 boolean firstBoard = connection.game == null;
                 connection.game = new ChessGame(load.getGame());
+                if (connection.game.isGameOver()) {
+                    connection.confirmResign = false;
+                    connection.resigning = false;
+                }
                 connection.loaded.complete(null);
                 Target target = connection.target;
                 text = (firstBoard ? target.description() + System.lineSeparator() : "")
                         + renderer.render(connection.game.getBoard(), target.perspective());
             } else if (message instanceof NotificationMessage notification) {
+                if (notification.isGameOver() && connection.game != null) {
+                    connection.game.endGame();
+                    connection.confirmResign = false;
+                    connection.resigning = false;
+                }
                 text = notification.getMessage();
             } else {
                 return;
@@ -215,6 +296,8 @@ final class GameplaySession {
                 return;
             }
             initial = connection.game == null;
+            connection.confirmResign = false;
+            connection.resigning = false;
         }
         boolean unauthorized = "Error: unauthorized".equals(message);
         if (initial || unauthorized) {
@@ -288,6 +371,8 @@ final class GameplaySession {
         private final CompletableFuture<Void> loaded = new CompletableFuture<>();
         private ChessGame game;
         private boolean closing;
+        private boolean confirmResign;
+        private boolean resigning;
 
         private Connection(Target target) {
             this.target = target;

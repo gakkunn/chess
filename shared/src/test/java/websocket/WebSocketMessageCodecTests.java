@@ -200,6 +200,25 @@ public class WebSocketMessageCodecTests {
         NotificationMessage restored = Assertions.assertInstanceOf(
                 NotificationMessage.class, codec.deserializeMessage(json));
         Assertions.assertEquals(text, restored.getMessage());
+        Assertions.assertFalse(restored.isGameOver());
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    public void notificationCanReportGameCompletionWithoutChangingItsText(boolean gameOver) {
+        NotificationMessage message = new NotificationMessage("Game status", gameOver);
+        NotificationMessage restored = Assertions.assertInstanceOf(NotificationMessage.class,
+                codec.deserializeMessage(codec.serialize(message)));
+
+        Assertions.assertEquals("Game status", restored.getMessage());
+        Assertions.assertEquals(gameOver, restored.isGameOver());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"\"true\"", "1", "[]", "{}"})
+    public void notificationRejectsInvalidCompletionFlags(String flag) {
+        String json = "{\"serverMessageType\":\"NOTIFICATION\",\"message\":\"Game status\",\"gameOver\":" + flag + "}";
+        Assertions.assertThrows(JsonParseException.class, () -> codec.deserializeMessage(json));
     }
 
     @ParameterizedTest

@@ -117,7 +117,7 @@ public final class WebSocketHandler {
         ResignGameResult result = gameplayService.resign(
                 new ResignGameRequest(command.getAuthToken(), command.getGameID()));
         connections.broadcast(command.getGameID(),
-                new NotificationMessage(result.username() + " resigned. The game is over."), null);
+                new NotificationMessage(result.username() + " resigned. The game is over.", true), null);
     }
 
     private void requireConnection(Session session, UserGameCommand command) throws BadRequestException {

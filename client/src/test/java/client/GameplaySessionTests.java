@@ -322,6 +322,10 @@ public class GameplaySessionTests {
             moves.add(new SubmittedMove(token, gameID, move));
         }
 
+        @Override
+        public void leaveGame(String token, int gameID) {
+        }
+
         private ServerMessageObserver current() {
             return observers.getLast();
         }

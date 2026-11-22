@@ -97,7 +97,8 @@ public class ChessClient implements AutoCloseable {
         return switch (getState()) {
             case SIGNED_OUT -> evaluatePreloginCommand(command, tokens);
             case SIGNED_IN -> evaluatePostloginCommand(command, tokens);
-            case CONNECTING -> "Waiting for the game board. Type 'help' to see available commands.";
+            case CONNECTING -> command.equals("leave") ? gameplay.evaluate(command, tokens)
+                    : "Waiting for the game board. Type 'help' to see available commands.";
             case IN_GAME -> gameplay.evaluate(command, tokens);
             case QUIT -> "The chess client is closed.";
         };
@@ -226,6 +227,7 @@ public class ChessClient implements AutoCloseable {
         return switch (getState()) {
             case SIGNED_IN -> POSTLOGIN_HELP;
             case CONNECTING -> "Waiting for the game board." + System.lineSeparator()
+                    + "  leave - Cancel the game connection" + System.lineSeparator()
                     + "  help - Show available commands" + System.lineSeparator() + "  quit - Exit the chess client";
             case IN_GAME -> gameplay.help();
             default -> PRELOGIN_HELP;
@@ -237,20 +239,30 @@ public class ChessClient implements AutoCloseable {
             return "Usage: quit";
         }
 
-        close();
-        return "Goodbye.";
+        String error = shutDown();
+        return error.isBlank() ? "Goodbye." : error + System.lineSeparator() + "Goodbye.";
     }
 
     @Override
     public void close() {
+        shutDown();
+    }
+
+    private String shutDown() {
         synchronized (commandLock) {
             synchronized (sessionLock) {
+                if (state == ClientState.QUIT) {
+                    return "";
+                }
                 state = ClientState.QUIT;
                 session = null;
             }
-            gameplay.reset();
-            if (ownsFacade) {
-                serverFacade.close();
+            try {
+                return gameplay.close();
+            } finally {
+                if (ownsFacade) {
+                    serverFacade.close();
+                }
             }
         }
     }

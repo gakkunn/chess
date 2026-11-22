@@ -16,6 +16,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import server.Server;
 import websocket.messages.LoadGameMessage;
+import websocket.messages.NotificationMessage;
 import websocket.messages.ServerMessage;
 
 import java.io.ByteArrayOutputStream;
@@ -34,6 +35,7 @@ import java.util.concurrent.TimeUnit;
 public class ReplGameplayTests {
 
     private Server server;
+    private MemoryGameDAO games;
     private ServerFacade player;
     private ServerFacade clientFacade;
     private ChessClient client;
@@ -48,7 +50,8 @@ public class ReplGameplayTests {
 
     @BeforeEach
     void openTerminal() throws Exception {
-        server = new Server(new MemoryUserDAO(), new MemoryAuthDAO(), new MemoryGameDAO());
+        games = new MemoryGameDAO();
+        server = new Server(new MemoryUserDAO(), new MemoryAuthDAO(), games);
         int port = server.run(0);
         player = new ServerFacade(port);
         playerAuth = player.register("white", "password", "white@example.com");
@@ -108,13 +111,77 @@ public class ReplGameplayTests {
     }
 
     @Test
-    void endOfInputClosesALiveGameConnection() throws Exception {
+    void endOfInputLeavesWithoutConfirmingAPendingResignation() throws Exception {
         type("login white password\nlist\nplay 1 WHITE\n");
         output.await("Joined 'Terminal Match' as WHITE.", 0);
         Assertions.assertTrue(clientFacade.isConnected());
+        BlockingQueue<ServerMessage> messages = new LinkedBlockingQueue<>();
+        player.connectGame(playerAuth.authToken(), gameID, messages::add);
+        Assertions.assertInstanceOf(LoadGameMessage.class, messages.poll(3, TimeUnit.SECONDS));
+        type("resign\n");
+        output.await("Type 'yes' to confirm", 0);
 
         keyboard.close();
         repl.get(4, TimeUnit.SECONDS);
+        NotificationMessage notice = Assertions.assertInstanceOf(NotificationMessage.class, messages.poll(3, TimeUnit.SECONDS));
+        Assertions.assertEquals("white left the game.", notice.getMessage());
+        Assertions.assertNull(games.getGame(gameID).whiteUsername());
+        Assertions.assertFalse(games.getGame(gameID).game().isGameOver());
+        Assertions.assertEquals(ClientState.QUIT, client.getState());
+        Assertions.assertFalse(clientFacade.isConnected());
+    }
+
+    @Test
+    void terminalCanCancelConfirmAndLeaveAfterResignation() throws Exception {
+        type("login white password\nlist\nplay 1 WHITE\n");
+        output.await("[IN_GAME] >>> ", 0);
+        BlockingQueue<ServerMessage> messages = new LinkedBlockingQueue<>();
+        player.connectGame(playerAuth.authToken(), gameID, messages::add);
+        Assertions.assertInstanceOf(LoadGameMessage.class, messages.poll(3, TimeUnit.SECONDS));
+        int beforeConfirmation = output.size();
+
+        type("resign\n");
+        output.await("Type 'yes' to confirm", beforeConfirmation);
+        Assertions.assertFalse(games.getGame(gameID).game().isGameOver());
+        type("no\n");
+        output.await("Resignation cancelled.", beforeConfirmation);
+        Assertions.assertFalse(games.getGame(gameID).game().isGameOver());
+        type("resign\nyes\n");
+        output.await("white resigned. The game is over.", beforeConfirmation);
+        Assertions.assertTrue(games.getGame(gameID).game().isGameOver());
+        Assertions.assertEquals(ClientState.IN_GAME, client.getState());
+        Assertions.assertTrue(clientFacade.isConnected());
+
+        int beforeLeaving = output.size();
+        type("redraw\nleave\n");
+        output.await("Left 'Terminal Match'.", beforeLeaving);
+        output.await("[SIGNED_IN] >>> ", beforeLeaving);
+        Assertions.assertTrue(Assertions.assertInstanceOf(NotificationMessage.class,
+                messages.poll(3, TimeUnit.SECONDS)).isGameOver());
+        Assertions.assertEquals("white left the game.", Assertions.assertInstanceOf(NotificationMessage.class,
+                messages.poll(3, TimeUnit.SECONDS)).getMessage());
+        Assertions.assertNull(games.getGame(gameID).whiteUsername());
+        Assertions.assertEquals(ClientState.SIGNED_IN, client.getState());
+        type("quit\n");
+        repl.get(4, TimeUnit.SECONDS);
+    }
+
+    @Test
+    void endOfInputImmediatelyAfterPlayStillReleasesTheSeat() throws Exception {
+        BlockingQueue<ServerMessage> messages = new LinkedBlockingQueue<>();
+        player.connectGame(playerAuth.authToken(), gameID, messages::add);
+        Assertions.assertInstanceOf(LoadGameMessage.class, messages.poll(3, TimeUnit.SECONDS));
+
+        type("login white password\nlist\nplay 1 WHITE\n");
+        keyboard.close();
+        repl.get(4, TimeUnit.SECONDS);
+        String lastNotice = "";
+        for (int index = 0; index < 2 && !lastNotice.equals("white left the game."); index++) {
+            NotificationMessage notice = Assertions.assertInstanceOf(NotificationMessage.class, messages.poll(3, TimeUnit.SECONDS));
+            lastNotice = notice.getMessage();
+        }
+        Assertions.assertEquals("white left the game.", lastNotice);
+        Assertions.assertNull(games.getGame(gameID).whiteUsername());
         Assertions.assertEquals(ClientState.QUIT, client.getState());
         Assertions.assertFalse(clientFacade.isConnected());
     }
