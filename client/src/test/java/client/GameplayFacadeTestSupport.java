@@ -45,7 +45,7 @@ abstract class GameplayFacadeTestSupport {
     public void startServer() throws Exception {
         users = new MemoryUserDAO();
         auth = new MemoryAuthDAO();
-        games = new MemoryGameDAO();
+        games = createGameDAO();
         startServer(0);
         white = facade(port);
         black = facade(port);
@@ -66,6 +66,10 @@ abstract class GameplayFacadeTestSupport {
         for (Server running : servers) {
             running.stop();
         }
+    }
+
+    protected MemoryGameDAO createGameDAO() {
+        return new MemoryGameDAO();
     }
 
     protected void startServer(int requestedPort) {
