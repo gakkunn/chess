@@ -7,7 +7,6 @@ import model.GameData;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
 import websocket.commands.MakeMoveCommand;
@@ -15,7 +14,6 @@ import websocket.messages.LoadGameMessage;
 
 import java.util.List;
 import java.util.concurrent.TimeUnit;
-import java.util.stream.Stream;
 
 public class WebSocketResignTests extends ConnectedGameTestSupport {
 
@@ -74,7 +72,7 @@ public class WebSocketResignTests extends ConnectedGameTestSupport {
     }
 
     @ParameterizedTest
-    @MethodSource("invalidResignRequests")
+    @MethodSource("invalidGameRequests")
     public void invalidRequestsDoNotEndTheGameOrRemoveTheConnection(String token, Integer requestedGameID)
             throws Exception {
         GameData before = snapshot();
@@ -197,18 +195,6 @@ public class WebSocketResignTests extends ConnectedGameTestSupport {
         Assertions.assertEquals("Error: The game is over", assertError(black).getErrorMessage());
         Assertions.assertEquals(completedSnapshot(before), gameDAO.getGame(gameID));
         assertAllQuiet();
-    }
-
-    private static Stream<Arguments> invalidResignRequests() {
-        return Stream.of(
-                Arguments.of("bad-token", 1),
-                Arguments.of(null, 1),
-                Arguments.of("", 1),
-                Arguments.of("black-token", 1),
-                Arguments.of("white-token", null),
-                Arguments.of("white-token", 0),
-                Arguments.of("white-token", -1),
-                Arguments.of("white-token", 999));
     }
 
     private ChessMove pawnMove() {

@@ -3,6 +3,7 @@ package client;
 import chess.ChessGame;
 import chess.ChessMove;
 import chess.ChessPosition;
+import client.GameplayFacadeTestSupport.TestGameplayClient;
 import dataaccess.sql.SQLGameDAO;
 import model.GameData;
 import org.junit.jupiter.api.AfterEach;

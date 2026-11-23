@@ -6,35 +6,39 @@ import chess.ChessPosition;
 import model.GameData;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import ui.BoardRenderer;
+import ui.EscapeSequences;
 import websocket.messages.LoadGameMessage;
 
-import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.TimeUnit;
-import java.util.function.Predicate;
+import java.util.Locale;
+import java.util.Set;
 
 public class ChessClientGameplayTests extends GameplayFacadeTestSupport {
 
     @Test
     void playersAndObserversLoadThePersistedBoardInTheirOwnPerspective() throws Exception {
         ChessGame progressed = advanceBoard();
-        Player whitePlayer = player(white, "white");
-        Player blackPlayer = player(black, "black");
-        Player watcher = player(observer, "observer");
+        TestGameplayClient whitePlayer = signIn("white");
+        TestGameplayClient blackPlayer = signIn("black");
+        TestGameplayClient watcher = signIn("observer");
+        for (TestGameplayClient client : new TestGameplayClient[]{whitePlayer, blackPlayer, watcher}) {
+            client.evaluate("list");
+        }
 
-        whitePlayer.client.evaluate("play 1 WHITE");
-        blackPlayer.client.evaluate("play 1 BLACK");
-        watcher.client.evaluate("observe 1");
+        whitePlayer.evaluate("play 1 WHITE");
+        blackPlayer.evaluate("play 1 BLACK");
+        watcher.evaluate("observe 1");
 
         BoardRenderer renderer = new BoardRenderer();
         Assertions.assertEquals("Joined 'Live Game' as WHITE." + System.lineSeparator()
-                + renderer.renderWhite(progressed.getBoard()), await(whitePlayer, text -> text.startsWith("Joined")));
+                + renderer.renderWhite(progressed.getBoard()), whitePlayer.await(text -> text.startsWith("Joined")));
         Assertions.assertEquals("Joined 'Live Game' as BLACK." + System.lineSeparator()
                 + renderer.render(progressed.getBoard(), ChessGame.TeamColor.BLACK),
-                await(blackPlayer, text -> text.startsWith("Joined")));
+                blackPlayer.await(text -> text.startsWith("Joined")));
         Assertions.assertEquals("Observing 'Live Game'." + System.lineSeparator()
-                + renderer.renderWhite(progressed.getBoard()), await(watcher, text -> text.startsWith("Observing")));
+                + renderer.renderWhite(progressed.getBoard()), watcher.await(text -> text.startsWith("Observing")));
         Assertions.assertEquals(ClientState.IN_GAME, whitePlayer.client.getState());
         Assertions.assertEquals(ClientState.IN_GAME, blackPlayer.client.getState());
         Assertions.assertEquals(ClientState.IN_GAME, watcher.client.getState());
@@ -44,16 +48,10 @@ public class ChessClientGameplayTests extends GameplayFacadeTestSupport {
 
     @Test
     void movesAndNotificationsReachIdleClientsWithoutAnotherCommand() throws Exception {
-        Player whitePlayer = player(white, "white");
-        Player blackPlayer = player(black, "black");
-        Player watcher = player(observer, "observer");
-        whitePlayer.client.evaluate("play 1 WHITE");
-        await(whitePlayer, text -> text.startsWith("Joined"));
-        blackPlayer.client.evaluate("play 1 BLACK");
-        await(blackPlayer, text -> text.startsWith("Joined"));
-        watcher.client.evaluate("observe 1");
-        await(watcher, text -> text.startsWith("Observing"));
-        Assertions.assertTrue(await(whitePlayer, text -> text.contains("observer")).contains("observer"));
+        TestGameplayClient whitePlayer = enter("white");
+        TestGameplayClient blackPlayer = enter("black");
+        TestGameplayClient watcher = enter("observer");
+        Assertions.assertTrue(whitePlayer.awaitContaining("observer").contains("observer"));
 
         ServerFacade mover = facade(port);
         RecordingObserver moves = new RecordingObserver();
@@ -64,55 +62,103 @@ public class ChessClientGameplayTests extends GameplayFacadeTestSupport {
 
         ChessGame expected = new ChessGame();
         expected.makeMove(move);
-        BoardRenderer renderer = new BoardRenderer();
-        Assertions.assertEquals(renderer.renderWhite(expected.getBoard()), await(whitePlayer, text -> text.contains("\u001b[")));
-        Assertions.assertEquals(renderer.render(expected.getBoard(), ChessGame.TeamColor.BLACK),
-                await(blackPlayer, text -> text.contains("\u001b[")));
-        Assertions.assertEquals(renderer.renderWhite(expected.getBoard()), await(watcher, text -> text.contains("\u001b[")));
-        Assertions.assertTrue(await(watcher, text -> text.contains("e2") && text.contains("e4")).contains("white"));
+        whitePlayer.awaitBoard(expected);
+        blackPlayer.awaitBoard(expected);
+        watcher.awaitBoard(expected);
+        Assertions.assertTrue(watcher.await(text -> text.contains("e2") && text.contains("e4")).contains("white"));
     }
 
     @Test
     void reconnectAfterServerRestartRestoresTheCurrentGameWithoutJoiningAgain() throws Exception {
-        Player player = player(black, "black");
-        player.client.evaluate("play 1 BLACK");
-        await(player, text -> text.startsWith("Joined"));
+        TestGameplayClient player = enter("black");
         int originalPort = port;
         stopServer();
-        await(player, text -> text.contains("reconnect"));
+        player.awaitContaining("reconnect");
         Assertions.assertEquals(ClientState.SIGNED_IN, player.client.getState());
         ChessGame progressed = advanceBoard();
         startServer(originalPort);
 
-        Assertions.assertEquals("Connecting to 'Live Game'...", player.client.evaluate("reconnect"));
-        String board = await(player, text -> text.startsWith("Joined"));
-        Assertions.assertTrue(board.endsWith(new BoardRenderer().render(progressed.getBoard(), ChessGame.TeamColor.BLACK)));
+        Assertions.assertEquals("Connecting to 'Live Game'...", player.evaluate("reconnect"));
+        String board = player.await(text -> text.startsWith("Joined"));
+        Assertions.assertTrue(board.endsWith(player.render(progressed)));
         Assertions.assertEquals(ClientState.IN_GAME, player.client.getState());
         Assertions.assertEquals("black", games.getGame(gameID).blackUsername());
     }
 
     @Test
     void observeWithAnExpiredSessionReturnsToSignedOut() throws Exception {
-        Player watcher = player(observer, "observer");
+        TestGameplayClient watcher = signIn("observer");
+        watcher.evaluate("list");
         auth.clear();
-        watcher.client.evaluate("observe 1");
+        watcher.evaluate("observe 1");
 
         Assertions.assertEquals("Your session is no longer valid. Please sign in again.",
-                await(watcher, text -> text.contains("sign in again")));
+                watcher.awaitContaining("sign in again"));
         Assertions.assertEquals(ClientState.SIGNED_OUT, watcher.client.getState());
-        Assertions.assertFalse(observer.isConnected());
+        Assertions.assertFalse(watcher.facade.isConnected());
     }
 
     @Test
     void deletedGameRejectsEntryAndAllowsOtherPregameCommands() throws Exception {
-        Player watcher = player(observer, "observer");
+        TestGameplayClient watcher = signIn("observer");
+        watcher.evaluate("list");
         games.clear();
-        watcher.client.evaluate("observe 1");
+        watcher.evaluate("observe 1");
 
-        await(watcher, text -> text.contains("Error:"));
+        watcher.awaitContaining("Error:");
         Assertions.assertEquals(ClientState.SIGNED_IN, watcher.client.getState());
-        Assertions.assertFalse(observer.isConnected());
-        Assertions.assertTrue(watcher.client.evaluate("create Another Game").contains("Created game"));
+        Assertions.assertFalse(watcher.facade.isConnected());
+        Assertions.assertTrue(watcher.evaluate("create Another Game").contains("Created game"));
+    }
+
+    @ParameterizedTest
+    @CsvSource({"white, e2, WHITE", "white, e7, WHITE", "black, e7, BLACK", "observer, e7, WHITE"})
+    void highlightingIsLocalForPlayersAndObservers(String username, String square, ChessGame.TeamColor perspective)
+            throws Exception {
+        TestGameplayClient player = enter(username);
+        RecordingObserver peer = new RecordingObserver();
+        facade(port).connectGame(blackAuth.authToken(), gameID, peer);
+        peer.take(LoadGameMessage.class);
+        player.awaitContaining("black connected");
+        ChessGame before = new ChessGame(games.getGame(gameID).game());
+        int row = square.charAt(1) - '0';
+        int step = row == 2 ? 1 : -1;
+
+        String response = player.evaluate("HIGHLIGHT " + square.toUpperCase(Locale.ROOT));
+        String expected = new BoardRenderer().renderHighlighted(before.getBoard(), perspective, new ChessPosition(row, 5),
+                Set.of(new ChessPosition(row + step, 5), new ChessPosition(row + 2 * step, 5)));
+        Assertions.assertTrue(response.startsWith("Selected " + square + " (yellow)."));
+        Assertions.assertTrue(response.endsWith(expected));
+        Assertions.assertEquals(ClientState.IN_GAME, player.client.getState());
+        Assertions.assertTrue(player.evaluate("help").contains("highlight <square>"));
+        Assertions.assertEquals(new BoardRenderer().render(before.getBoard(), perspective), player.evaluate("redraw"));
+        Assertions.assertEquals(before, games.getGame(gameID).game());
+        Assertions.assertEquals("white", games.getGame(gameID).whiteUsername());
+        Assertions.assertEquals("black", games.getGame(gameID).blackUsername());
+        player.assertQuiet();
+        peer.assertQuiet();
+    }
+
+    @Test
+    void serverUpdatesReplaceHighlightsAndSubsequentQueriesUseTheNewBoard() throws Exception {
+        TestGameplayClient watcher = enter("observer");
+        white.connectGame(whiteAuth.authToken(), gameID, whiteMessages);
+        whiteMessages.take(LoadGameMessage.class);
+        watcher.awaitContaining("white connected");
+        Assertions.assertTrue(watcher.evaluate("highlight e2").contains(EscapeSequences.SET_BG_COLOR_YELLOW));
+        ChessMove move = new ChessMove(new ChessPosition(2, 5), new ChessPosition(4, 5), null);
+        white.makeMove(whiteAuth.authToken(), gameID, move);
+        ChessGame updated = new ChessGame();
+        updated.makeMove(move);
+
+        String board = watcher.await(text -> text.contains("\u001b["));
+        Assertions.assertEquals(new BoardRenderer().renderWhite(updated.getBoard()), board);
+        Assertions.assertFalse(board.contains(EscapeSequences.SET_BG_COLOR_YELLOW));
+        Assertions.assertFalse(board.contains(EscapeSequences.SET_BG_COLOR_GREEN));
+        Assertions.assertEquals("There is no piece at e2.", watcher.evaluate("highlight e2"));
+        Assertions.assertTrue(watcher.evaluate("highlight e4").endsWith(new BoardRenderer().renderHighlighted(
+                updated.getBoard(), ChessGame.TeamColor.WHITE, new ChessPosition(4, 5), Set.of(new ChessPosition(5, 5)))));
+        Assertions.assertEquals(updated, games.getGame(gameID).game());
     }
 
     private ChessGame advanceBoard() throws Exception {
@@ -122,26 +168,4 @@ public class ChessClientGameplayTests extends GameplayFacadeTestSupport {
         games.updateGame(new GameData(gameID, stored.whiteUsername(), stored.blackUsername(), stored.gameName(), game));
         return game;
     }
-
-    private Player player(ServerFacade facade, String username) {
-        ChessClient client = new ChessClient(facade);
-        BlockingQueue<String> messages = new LinkedBlockingQueue<>();
-        client.setNotificationListener(messages::add);
-        Assertions.assertEquals("Signed in as " + username + ".", client.evaluate("login " + username + " password"));
-        client.evaluate("list");
-        return new Player(client, messages);
-    }
-
-    private String await(Player player, Predicate<String> matches) throws InterruptedException {
-        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(4);
-        while (System.nanoTime() < deadline) {
-            String message = player.messages.poll(Math.max(1, deadline - System.nanoTime()), TimeUnit.NANOSECONDS);
-            if (message != null && matches.test(message)) {
-                return message;
-            }
-        }
-        return Assertions.fail("Expected gameplay display was not received.");
-    }
-
-    private record Player(ChessClient client, BlockingQueue<String> messages) { }
 }

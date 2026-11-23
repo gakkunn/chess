@@ -27,10 +27,10 @@ public class ChessClientConcurrencyTests extends GameplayFacadeTestSupport {
 
     @Test
     void competingMovesFromTheSamePlayerConvergeWithoutAnEarlyBoardUpdate() throws Exception {
-        TestGameplayClient first = connect("white", ChessGame.TeamColor.WHITE, 1);
-        TestGameplayClient second = connect("white", ChessGame.TeamColor.WHITE, 1);
-        TestGameplayClient blackPlayer = connect("black", ChessGame.TeamColor.BLACK, 1);
-        TestGameplayClient watcher = connect("observer", null, 1);
+        TestGameplayClient first = enter("white");
+        TestGameplayClient second = enter("white");
+        TestGameplayClient blackPlayer = enter("black");
+        TestGameplayClient watcher = enter("observer");
         for (TestGameplayClient client : new TestGameplayClient[]{first, second, blackPlayer}) {
             client.awaitContaining("observer connected");
         }
@@ -165,8 +165,8 @@ public class ChessClientConcurrencyTests extends GameplayFacadeTestSupport {
     void aPendingSaveDoesNotBlockOrBroadcastIntoAnotherGame() throws Exception {
         int otherID = white.createGame(whiteAuth.authToken(), "Independent Game");
         white.joinGame(whiteAuth.authToken(), ChessGame.TeamColor.WHITE, otherID);
-        TestGameplayClient first = connect("white", ChessGame.TeamColor.WHITE, 1);
-        TestGameplayClient other = connect("white", ChessGame.TeamColor.WHITE, 2);
+        TestGameplayClient first = enter("white");
+        TestGameplayClient other = enter("white", 2);
         SaveGate save = controlledGames.pause(gameID);
         try {
             first.evaluate("move e2 e4");
@@ -224,19 +224,12 @@ public class ChessClientConcurrencyTests extends GameplayFacadeTestSupport {
     }
 
     private TestGameplayClient[] connectAll() throws Exception {
-        TestGameplayClient whitePlayer = connect("white", ChessGame.TeamColor.WHITE, 1);
-        TestGameplayClient blackPlayer = connect("black", ChessGame.TeamColor.BLACK, 1);
-        TestGameplayClient watcher = connect("observer", null, 1);
+        TestGameplayClient whitePlayer = enter("white");
+        TestGameplayClient blackPlayer = enter("black");
+        TestGameplayClient watcher = enter("observer");
         whitePlayer.awaitContaining("observer connected");
         blackPlayer.awaitContaining("observer connected");
         return new TestGameplayClient[]{whitePlayer, blackPlayer, watcher};
-    }
-
-    private TestGameplayClient connect(String username, ChessGame.TeamColor color, int number) throws Exception {
-        TestGameplayClient client = new TestGameplayClient(facade(port), color);
-        Assertions.assertEquals("Signed in as " + username + ".", client.evaluate("login " + username + " password"));
-        client.enter(number);
-        return client;
     }
 
     private ChessGame afterWhiteMove() throws Exception {

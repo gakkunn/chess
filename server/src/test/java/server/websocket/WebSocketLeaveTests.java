@@ -7,7 +7,6 @@ import model.GameData;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -19,7 +18,6 @@ import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
-import java.util.stream.Stream;
 
 public class WebSocketLeaveTests extends ConnectedGameTestSupport {
 
@@ -106,7 +104,7 @@ public class WebSocketLeaveTests extends ConnectedGameTestSupport {
     }
 
     @ParameterizedTest
-    @MethodSource("invalidLeaveRequests")
+    @MethodSource("invalidGameRequests")
     public void invalidRequestsDoNotChangeMembershipOrNotifyOthers(String token, Integer requestedGameID)
             throws Exception {
         GameData before = snapshot();
@@ -286,18 +284,6 @@ public class WebSocketLeaveTests extends ConnectedGameTestSupport {
         assertLeaveDelivered(white, "white");
         Assertions.assertEquals("replacement", gameDAO.getGame(gameID).whiteUsername());
         Assertions.assertEquals(before.game(), gameDAO.getGame(gameID).game());
-    }
-
-    private static Stream<Arguments> invalidLeaveRequests() {
-        return Stream.of(
-                Arguments.of("bad-token", 1),
-                Arguments.of(null, 1),
-                Arguments.of("", 1),
-                Arguments.of("black-token", 1),
-                Arguments.of("white-token", null),
-                Arguments.of("white-token", 0),
-                Arguments.of("white-token", -1),
-                Arguments.of("white-token", 999));
     }
 
     private ChessGame.TeamColor opposite(ChessGame.TeamColor color) {
