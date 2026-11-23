@@ -31,49 +31,68 @@ public class Repl {
     }
 
     public void run() {
-        synchronized (outputLock) {
-            running = true;
-            client.setNotificationListener(this::displayNotification);
-            output.println("Welcome to 240 Chess. Type 'help' to get started.");
-        }
+        start();
         try {
             while (client.getState() != ClientState.QUIT) {
-                synchronized (outputLock) {
-                    waitingForInput = true;
-                    output.print(prompt());
-                    output.flush();
-                }
+                showPrompt();
                 if (!scanner.hasNextLine()) {
                     synchronized (outputLock) {
                         output.println();
                     }
                     return;
                 }
-                String input = scanner.nextLine();
-                synchronized (outputLock) {
-                    waitingForInput = false;
-                    processingCommand = true;
-                }
-                String response = client.evaluate(input);
-                synchronized (outputLock) {
-                    if (!response.isBlank()) {
-                        output.println(response);
-                    }
-                    processingCommand = false;
-                    while (!pendingMessages.isEmpty()) {
-                        output.println(pendingMessages.remove());
-                    }
-                    output.flush();
-                }
+                evaluateInput(scanner.nextLine());
             }
         } finally {
-            synchronized (outputLock) {
-                running = false;
-                pendingMessages.clear();
-            }
-            client.setNotificationListener(message -> { });
-            client.close();
+            finish();
         }
+    }
+
+    private void start() {
+        synchronized (outputLock) {
+            running = true;
+            client.setNotificationListener(this::displayNotification);
+            output.println("Welcome to 240 Chess. Type 'help' to get started.");
+        }
+    }
+
+    private void showPrompt() {
+        synchronized (outputLock) {
+            waitingForInput = true;
+            output.print(prompt());
+            output.flush();
+        }
+    }
+
+    private void evaluateInput(String input) {
+        synchronized (outputLock) {
+            waitingForInput = false;
+            processingCommand = true;
+        }
+        String response = client.evaluate(input);
+        synchronized (outputLock) {
+            if (!response.isBlank()) {
+                output.println(response);
+            }
+            processingCommand = false;
+            if (client.getState() == ClientState.QUIT) {
+                pendingMessages.clear();
+            } else {
+                while (!pendingMessages.isEmpty()) {
+                    output.println(pendingMessages.remove());
+                }
+            }
+            output.flush();
+        }
+    }
+
+    private void finish() {
+        synchronized (outputLock) {
+            running = false;
+            pendingMessages.clear();
+        }
+        client.setNotificationListener(message -> { });
+        client.close();
     }
 
     private void displayNotification(String message) {

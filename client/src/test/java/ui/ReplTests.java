@@ -18,6 +18,7 @@ import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Scanner;
+import java.util.function.Consumer;
 
 public class ReplTests {
 
@@ -38,6 +39,7 @@ public class ReplTests {
 
     @AfterAll
     static void stopServer() {
+        facade.close();
         server.stop();
     }
 
@@ -59,6 +61,25 @@ public class ReplTests {
         Assertions.assertAll(
                 () -> Assertions.assertTrue(output.contains("Welcome to 240 Chess")),
                 () -> Assertions.assertTrue(output.contains("[SIGNED_OUT] >>>")));
+    }
+
+    @Test
+    void notificationsQueuedDuringQuitAreNotPrintedAfterGoodbye() {
+        String output = runRepl(notifyingClient(), "quit\n");
+
+        Assertions.assertFalse(output.contains("Another player joined."));
+        Assertions.assertTrue(output.endsWith("Goodbye." + System.lineSeparator()));
+    }
+
+    @Test
+    void notificationsQueuedDuringOtherCommandsAreStillDisplayed() {
+        String output = runRepl(notifyingClient(), "help\nquit\n");
+        int notification = output.indexOf("Another player joined.");
+
+        Assertions.assertTrue(notification >= 0);
+        Assertions.assertTrue(notification < output.indexOf("Goodbye."));
+        Assertions.assertEquals(notification, output.lastIndexOf("Another player joined."));
+        Assertions.assertTrue(output.endsWith("Goodbye." + System.lineSeparator()));
     }
 
     @Test
@@ -94,6 +115,28 @@ public class ReplTests {
     }
 
     private String runRepl(String inputText) {
+        return runRepl(new ChessClient(facade), inputText);
+    }
+
+    private ChessClient notifyingClient() {
+        return new ChessClient(facade) {
+            private Consumer<String> notifications;
+
+            @Override
+            public void setNotificationListener(Consumer<String> listener) {
+                super.setNotificationListener(listener);
+                notifications = listener;
+            }
+
+            @Override
+            public String evaluate(String input) {
+                notifications.accept("Another player joined.");
+                return super.evaluate(input);
+            }
+        };
+    }
+
+    private String runRepl(ChessClient client, String inputText) {
         ByteArrayInputStream input = new ByteArrayInputStream(
                 inputText.getBytes(StandardCharsets.UTF_8));
         ByteArrayOutputStream output = new ByteArrayOutputStream();
@@ -103,7 +146,6 @@ public class ReplTests {
                      output,
                      true,
                      StandardCharsets.UTF_8)) {
-            ChessClient client = new ChessClient(facade);
             Repl repl = new Repl(client, scanner, printStream);
             repl.run();
         }

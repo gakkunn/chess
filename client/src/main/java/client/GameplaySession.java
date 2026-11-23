@@ -9,6 +9,7 @@ import websocket.messages.NotificationMessage;
 import websocket.messages.ServerMessage;
 
 import java.time.Duration;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
@@ -17,6 +18,19 @@ final class GameplaySession {
 
     private static final String RECONNECT_HINT = "Type 'reconnect' to return to the game, or 'list' to choose a game.";
     private static final String CONFIRM_RESIGN = "Resign this game? Type 'yes' to confirm or 'no' to cancel.";
+    private static final Set<String> CONFIRMATION_COMMANDS = Set.of("yes", "no", "redraw", "highlight", "leave");
+    private static final String BOARD_HELP = String.join(System.lineSeparator(),
+            "Available commands:",
+            "  redraw - Redraw the current chess board",
+            "  highlight <square> - Highlight a piece and its legal moves");
+    private static final String PLAYER_HELP = String.join(System.lineSeparator(),
+            "  move <from> <to> [" + MoveParser.PROMOTION_CHOICES + "] - Make a move",
+            "    Use squares a1-h8, e.g. move e2 e4. Choose a piece when promoting a pawn.",
+            "  resign - Forfeit the game after confirmation");
+    private static final String SESSION_HELP = String.join(System.lineSeparator(),
+            "  leave - Leave the game",
+            "  help - Show available commands",
+            "  quit - Exit the chess client");
     private final ServerFacade facade;
     private final Consumer<String> output;
     private final Consumer<String> expiredSession;
@@ -44,8 +58,8 @@ final class GameplaySession {
 
     String evaluate(String command, String[] tokens) {
         synchronized (lock) {
-            if (active != null && active.confirmResign && !command.equals("yes") && !command.equals("no")
-                    && !command.equals("redraw") && !command.equals("highlight") && !command.equals("leave")) {
+            if (active != null && active.resignation == ResignationState.CONFIRMING
+                    && !CONFIRMATION_COMMANDS.contains(command)) {
                 return CONFIRM_RESIGN;
             }
         }
@@ -61,20 +75,10 @@ final class GameplaySession {
 
     String help() {
         synchronized (lock) {
-            String moveHelp = active != null && active.target.color != null
-                    ? "  move <from> <to> [" + MoveParser.PROMOTION_CHOICES + "] - Make a move"
-                    + System.lineSeparator()
-                    + "    Use squares a1-h8, e.g. move e2 e4. Choose a piece when promoting a pawn."
-                    + System.lineSeparator() + "  resign - Forfeit the game after confirmation"
-                    + System.lineSeparator() : "";
-            return "Available commands:" + System.lineSeparator()
-                    + "  redraw - Redraw the current chess board" + System.lineSeparator()
-                    + "  highlight <square> - Highlight a piece and its legal moves" + System.lineSeparator()
-                    + moveHelp
-                    + "  leave - Leave the game" + System.lineSeparator()
-                    + "  help - Show available commands" + System.lineSeparator()
-                    + "  quit - Exit the chess client"
-                    + (active != null && active.confirmResign ? System.lineSeparator() + CONFIRM_RESIGN : "");
+            String playerCommands = active != null && active.target.color != null ? PLAYER_HELP + System.lineSeparator() : "";
+            String confirmation = active != null && active.resignation == ResignationState.CONFIRMING
+                    ? System.lineSeparator() + CONFIRM_RESIGN : "";
+            return BOARD_HELP + System.lineSeparator() + playerCommands + SESSION_HELP + confirmation;
         }
     }
 
@@ -100,7 +104,7 @@ final class GameplaySession {
                 return "No game board is available. " + RECONNECT_HINT;
             }
             connection = active;
-            if (connection.resigning) {
+            if (connection.resignation == ResignationState.SUBMITTED) {
                 return "Waiting for the server to confirm resignation.";
             }
             String error = MoveValidator.validate(connection.game, connection.target.color, move, tokens);
@@ -135,10 +139,10 @@ final class GameplaySession {
             if (active.game.isGameOver()) {
                 return "The game is already over.";
             }
-            if (active.resigning) {
+            if (active.resignation == ResignationState.SUBMITTED) {
                 return "Waiting for the server to confirm resignation.";
             }
-            active.confirmResign = true;
+            active.resignation = ResignationState.CONFIRMING;
             return CONFIRM_RESIGN;
         }
     }
@@ -146,18 +150,18 @@ final class GameplaySession {
     private String confirmResignation(boolean confirmed, String[] tokens) {
         Connection connection;
         synchronized (lock) {
-            if (!hasBoard() || !active.confirmResign) {
+            if (!hasBoard() || active.resignation != ResignationState.CONFIRMING) {
                 return "There is no resignation to confirm. Type 'resign' first.";
             }
             if (tokens.length != 1) {
                 return "Please enter only 'yes' or 'no'.";
             }
             connection = active;
-            connection.confirmResign = false;
+            connection.resignation = ResignationState.NONE;
             if (!confirmed) {
                 return "Resignation cancelled.";
             }
-            connection.resigning = true;
+            connection.resignation = ResignationState.SUBMITTED;
         }
         try {
             Target target = connection.target;
@@ -265,8 +269,7 @@ final class GameplaySession {
                 boolean firstBoard = connection.game == null;
                 connection.game = new ChessGame(load.getGame());
                 if (connection.game.isGameOver()) {
-                    connection.confirmResign = false;
-                    connection.resigning = false;
+                    connection.resignation = ResignationState.NONE;
                 }
                 connection.loaded.complete(null);
                 Target target = connection.target;
@@ -275,8 +278,7 @@ final class GameplaySession {
             } else if (message instanceof NotificationMessage notification) {
                 if (notification.isGameOver() && connection.game != null) {
                     connection.game.endGame();
-                    connection.confirmResign = false;
-                    connection.resigning = false;
+                    connection.resignation = ResignationState.NONE;
                 }
                 text = notification.getMessage();
             } else {
@@ -293,8 +295,7 @@ final class GameplaySession {
                 return;
             }
             initial = connection.game == null;
-            connection.confirmResign = false;
-            connection.resigning = false;
+            connection.resignation = ResignationState.NONE;
         }
         boolean unauthorized = "Error: unauthorized".equals(message);
         if (initial || unauthorized) {
@@ -368,11 +369,16 @@ final class GameplaySession {
         private final CompletableFuture<Void> loaded = new CompletableFuture<>();
         private ChessGame game;
         private boolean closing;
-        private boolean confirmResign;
-        private boolean resigning;
+        private ResignationState resignation = ResignationState.NONE;
 
         private Connection(Target target) {
             this.target = target;
         }
+    }
+
+    private enum ResignationState {
+        NONE,
+        CONFIRMING,
+        SUBMITTED
     }
 }
