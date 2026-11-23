@@ -17,6 +17,7 @@ import java.util.function.Consumer;
 final class GameplaySession {
 
     private static final String RECONNECT_HINT = "Type 'reconnect' to return to the game, or 'list' to choose a game.";
+    private static final String NO_BOARD = "No game board is available. " + RECONNECT_HINT;
     private static final String CONFIRM_RESIGN = "Resign this game? Type 'yes' to confirm or 'no' to cancel.";
     private static final Set<String> CONFIRMATION_COMMANDS = Set.of("yes", "no", "redraw", "highlight", "leave");
     private static final String BOARD_HELP = String.join(System.lineSeparator(),
@@ -31,6 +32,7 @@ final class GameplaySession {
             "  leave - Leave the game",
             "  help - Show available commands",
             "  quit - Exit the chess client");
+
     private final ServerFacade facade;
     private final Consumer<String> output;
     private final Consumer<String> expiredSession;
@@ -40,7 +42,8 @@ final class GameplaySession {
     private Connection active;
     private Target resumable;
 
-    GameplaySession(ServerFacade facade, Consumer<String> output, Consumer<String> expiredSession, Duration loadTimeout) {
+    GameplaySession(ServerFacade facade, Consumer<String> output, Consumer<String> expiredSession,
+                    Duration loadTimeout) {
         this.facade = facade;
         this.output = output;
         this.expiredSession = expiredSession;
@@ -75,7 +78,8 @@ final class GameplaySession {
 
     String help() {
         synchronized (lock) {
-            String playerCommands = active != null && active.target.color != null ? PLAYER_HELP + System.lineSeparator() : "";
+            String playerCommands = active != null && active.target.color != null
+                    ? PLAYER_HELP + System.lineSeparator() : "";
             String confirmation = active != null && active.resignation == ResignationState.CONFIRMING
                     ? System.lineSeparator() + CONFIRM_RESIGN : "";
             return BOARD_HELP + System.lineSeparator() + playerCommands + SESSION_HELP + confirmation;
@@ -85,7 +89,7 @@ final class GameplaySession {
     private String displayBoard(String command, String[] tokens) {
         synchronized (lock) {
             if (!hasBoard()) {
-                return "No game board is available. " + RECONNECT_HINT;
+                return NO_BOARD;
             }
             return boardView.evaluate(command, tokens, active.game, active.target.perspective());
         }
@@ -101,13 +105,13 @@ final class GameplaySession {
         Connection connection;
         synchronized (lock) {
             if (!hasBoard()) {
-                return "No game board is available. " + RECONNECT_HINT;
+                return NO_BOARD;
             }
             connection = active;
             if (connection.resignation == ResignationState.SUBMITTED) {
                 return "Waiting for the server to confirm resignation.";
             }
-            String error = MoveValidator.validate(connection.game, connection.target.color, move, tokens);
+            String error = MoveValidator.validate(connection.game, connection.target.color, move);
             if (error != null) {
                 return error;
             }
@@ -117,7 +121,7 @@ final class GameplaySession {
             facade.makeMove(target.auth.authToken(), target.game.gameID(), move);
             return "Move submitted.";
         } catch (ServerFacadeException exception) {
-            return finishFailure(connection, false) ? exception.getMessage() + " " + RECONNECT_HINT : "";
+            return connectionFailure(connection, exception);
         }
     }
 
@@ -131,7 +135,7 @@ final class GameplaySession {
         }
         synchronized (lock) {
             if (!hasBoard()) {
-                return "No game board is available. " + RECONNECT_HINT;
+                return NO_BOARD;
             }
             if (active.target.color == null) {
                 return "Observers cannot resign.";
@@ -168,7 +172,7 @@ final class GameplaySession {
             facade.resignGame(target.auth.authToken(), target.game.gameID());
             return "Resignation submitted.";
         } catch (ServerFacadeException exception) {
-            return finishFailure(connection, false) ? exception.getMessage() + " " + RECONNECT_HINT : "";
+            return connectionFailure(connection, exception);
         }
     }
 
@@ -181,8 +185,7 @@ final class GameplaySession {
         synchronized (lock) {
             connection = active != null && !active.closing ? active : null;
             if (connection != null) {
-                connection.closing = true;
-                connection.loaded.complete(null);
+                connection.beginClosing();
             } else if (!quitting) {
                 return "There is no active game to leave.";
             }
@@ -244,7 +247,7 @@ final class GameplaySession {
                 }
             });
         } catch (ServerFacadeException exception) {
-            return finishFailure(connection, false) ? exception.getMessage() + " " + RECONNECT_HINT : "";
+            return connectionFailure(connection, exception);
         }
         connection.loaded.orTimeout(loadTimeout.toMillis(), TimeUnit.MILLISECONDS).exceptionallyAsync(exception -> {
             if (finishFailure(connection, false, true)) {
@@ -266,26 +269,34 @@ final class GameplaySession {
                 return;
             }
             if (message instanceof LoadGameMessage load) {
-                boolean firstBoard = connection.game == null;
-                connection.game = new ChessGame(load.getGame());
-                if (connection.game.isGameOver()) {
-                    connection.resignation = ResignationState.NONE;
-                }
-                connection.loaded.complete(null);
-                Target target = connection.target;
-                text = (firstBoard ? target.description() + System.lineSeparator() : "")
-                        + boardView.render(connection.game, target.perspective());
+                text = loadBoard(connection, load);
             } else if (message instanceof NotificationMessage notification) {
-                if (notification.isGameOver() && connection.game != null) {
-                    connection.game.endGame();
-                    connection.resignation = ResignationState.NONE;
-                }
-                text = notification.getMessage();
+                text = applyNotification(connection, notification);
             } else {
                 return;
             }
         }
         output.accept(text);
+    }
+
+    private String loadBoard(Connection connection, LoadGameMessage load) {
+        boolean firstBoard = connection.game == null;
+        connection.game = new ChessGame(load.getGame());
+        if (connection.game.isGameOver()) {
+            connection.resignation = ResignationState.NONE;
+        }
+        connection.loaded.complete(null);
+        Target target = connection.target;
+        return (firstBoard ? target.description() + System.lineSeparator() : "")
+                + boardView.render(connection.game, target.perspective());
+    }
+
+    private String applyNotification(Connection connection, NotificationMessage notification) {
+        if (notification.isGameOver() && connection.game != null) {
+            connection.game.endGame();
+            connection.resignation = ResignationState.NONE;
+        }
+        return notification.getMessage();
     }
 
     private void receiveError(Connection connection, String message) {
@@ -315,17 +326,25 @@ final class GameplaySession {
         }
     }
 
+    private String connectionFailure(Connection connection, ServerFacadeException exception) {
+        return finishFailure(connection, false) ? exception.getMessage() + " " + RECONNECT_HINT : "";
+    }
+
     private boolean finishFailure(Connection connection, boolean unauthorized) {
         return finishFailure(connection, unauthorized, false);
     }
 
+    /**
+     * Ends a failed connection unless it was already replaced, closed, or (when onlyLoading) loaded.
+     *
+     * @return true if this call ended the connection and the caller should report the failure
+     */
     private boolean finishFailure(Connection connection, boolean unauthorized, boolean onlyLoading) {
         synchronized (lock) {
             if (active != connection || connection.closing || (onlyLoading && connection.game != null)) {
                 return false;
             }
-            connection.closing = true;
-            connection.loaded.complete(null);
+            connection.beginClosing();
             if (unauthorized) {
                 resumable = null;
             }
@@ -344,8 +363,7 @@ final class GameplaySession {
     void reset() {
         synchronized (lock) {
             if (active != null) {
-                active.closing = true;
-                active.loaded.complete(null);
+                active.beginClosing();
             }
             active = null;
             resumable = null;
@@ -373,6 +391,11 @@ final class GameplaySession {
 
         private Connection(Target target) {
             this.target = target;
+        }
+
+        private void beginClosing() {
+            closing = true;
+            loaded.complete(null);
         }
     }
 

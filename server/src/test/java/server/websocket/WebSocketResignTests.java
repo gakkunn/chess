@@ -3,10 +3,8 @@ package server.websocket;
 import chess.ChessGame;
 import chess.ChessMove;
 import chess.ChessPosition;
-import dataaccess.MemoryGameDAO;
 import model.GameData;
 import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -19,31 +17,7 @@ import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
 
-public class WebSocketResignTests extends WebSocketEndpointTestSupport {
-
-    private ControlledGameDAO controlledGames;
-    private SocketClient white;
-    private SocketClient black;
-    private SocketClient observer;
-
-    @Override
-    protected MemoryGameDAO createGameDAO() {
-        controlledGames = new ControlledGameDAO();
-        return controlledGames;
-    }
-
-    @BeforeEach
-    public void connectParticipants() throws Exception {
-        white = openSocket();
-        black = openSocket();
-        observer = openSocket();
-        connect(white, "white-token", gameID);
-        connect(black, "black-token", gameID);
-        assertNotice(white, "black", "BLACK");
-        connect(observer, "observer-token", gameID);
-        assertNotice(white, "observer", "observer");
-        assertNotice(black, "observer", "observer");
-    }
+public class WebSocketResignTests extends ConnectedGameTestSupport {
 
     @ParameterizedTest
     @EnumSource(ChessGame.TeamColor.class)
@@ -241,25 +215,11 @@ public class WebSocketResignTests extends WebSocketEndpointTestSupport {
         return new ChessMove(new ChessPosition(2, 5), new ChessPosition(4, 5), null);
     }
 
-    private GameData snapshot() throws Exception {
-        GameData stored = gameDAO.getGame(gameID);
-        return new GameData(stored.gameID(), stored.whiteUsername(), stored.blackUsername(),
-                stored.gameName(), new ChessGame(stored.game()));
-    }
-
     private GameData completedSnapshot(GameData before) {
         ChessGame completed = new ChessGame(before.game());
         completed.endGame();
         return new GameData(before.gameID(), before.whiteUsername(), before.blackUsername(),
                 before.gameName(), completed);
-    }
-
-    private SocketClient player(ChessGame.TeamColor color) {
-        return color == ChessGame.TeamColor.WHITE ? white : black;
-    }
-
-    private String username(ChessGame.TeamColor color) {
-        return color == ChessGame.TeamColor.WHITE ? "white" : "black";
     }
 
     private void assertResigned(GameData expected, String username) throws Exception {
@@ -268,11 +228,5 @@ public class WebSocketResignTests extends WebSocketEndpointTestSupport {
         }
         Assertions.assertEquals(expected, gameDAO.getGame(gameID));
         assertAllQuiet();
-    }
-
-    private void assertAllQuiet() throws Exception {
-        white.assertNoMessage();
-        black.assertNoMessage();
-        observer.assertNoMessage();
     }
 }

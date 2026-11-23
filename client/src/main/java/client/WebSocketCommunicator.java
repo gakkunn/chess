@@ -47,9 +47,7 @@ final class WebSocketCommunicator implements AutoCloseable {
 
     void connect(UserGameCommand command, ServerMessageObserver observer) throws ServerFacadeException {
         Objects.requireNonNull(observer, "Server message observer cannot be null.");
-        if (closed.get()) {
-            throw new ServerFacadeException("The chess client is closed.");
-        }
+        requireNotClosed();
 
         Connection connection = new Connection(observer);
         if (!active.compareAndSet(null, connection)) {
@@ -59,23 +57,8 @@ final class WebSocketCommunicator implements AutoCloseable {
         }
 
         try {
-            if (closed.get()) {
-                throw new ServerFacadeException("The chess client is closed.");
-            }
-            boolean opened = false;
-            try {
-                connection.client.connectToServer(connection, ClientEndpointConfig.Builder.create().build(), endpoint);
-                opened = true;
-            } finally {
-                if (!opened) {
-                    active.compareAndSet(connection, null);
-                    connection.closeRequested.set(true);
-                }
-                connection.opening = false;
-                if (connection.closeRequested.get()) {
-                    connection.dispose();
-                }
-            }
+            requireNotClosed();
+            open(connection);
             send(connection, command);
         } catch (DeploymentException | IOException | RuntimeException exception) {
             cancel(connection);
@@ -118,6 +101,32 @@ final class WebSocketCommunicator implements AutoCloseable {
             return new URI(scheme, null, serverUri.getHost(), serverUri.getPort(), "/ws", null, null);
         } catch (URISyntaxException exception) {
             throw new IllegalArgumentException("Unable to create the game WebSocket URL.", exception);
+        }
+    }
+
+    private void requireNotClosed() throws ServerFacadeException {
+        if (closed.get()) {
+            throw new ServerFacadeException("The chess client is closed.");
+        }
+    }
+
+    /**
+     * Completes the handshake. A failed open is detached before callbacks can report it as a lost connection.
+     */
+    private void open(Connection connection) throws DeploymentException, IOException {
+        boolean opened = false;
+        try {
+            connection.client.connectToServer(connection, ClientEndpointConfig.Builder.create().build(), endpoint);
+            opened = true;
+        } finally {
+            if (!opened) {
+                active.compareAndSet(connection, null);
+                connection.closeRequested.set(true);
+            }
+            connection.opening = false;
+            if (connection.closeRequested.get()) {
+                connection.dispose();
+            }
         }
     }
 

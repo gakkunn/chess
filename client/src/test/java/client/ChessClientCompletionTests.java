@@ -6,7 +6,6 @@ import model.GameData;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
-import testutil.GameplayPositions;
 
 public class ChessClientCompletionTests extends GameplayFacadeTestSupport {
 

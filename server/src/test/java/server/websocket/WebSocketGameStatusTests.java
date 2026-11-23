@@ -3,10 +3,8 @@ package server.websocket;
 import chess.ChessGame;
 import chess.ChessMove;
 import chess.ChessPosition;
-import dataaccess.MemoryGameDAO;
 import model.GameData;
 import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
@@ -18,31 +16,7 @@ import websocket.messages.NotificationMessage;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
-public class WebSocketGameStatusTests extends WebSocketEndpointTestSupport {
-
-    private ControlledGameDAO controlledGames;
-    private SocketClient white;
-    private SocketClient black;
-    private SocketClient observer;
-
-    @Override
-    protected MemoryGameDAO createGameDAO() {
-        controlledGames = new ControlledGameDAO();
-        return controlledGames;
-    }
-
-    @BeforeEach
-    public void connectParticipants() throws Exception {
-        white = openSocket();
-        black = openSocket();
-        observer = openSocket();
-        connect(white, "white-token", gameID);
-        connect(black, "black-token", gameID);
-        assertNotice(white, "black", "BLACK");
-        connect(observer, "observer-token", gameID);
-        assertNotice(white, "observer", "observer");
-        assertNotice(black, "observer", "observer");
-    }
+public class WebSocketGameStatusTests extends ConnectedGameTestSupport {
 
     @ParameterizedTest
     @EnumSource(ChessGame.TeamColor.class)
@@ -195,14 +169,6 @@ public class WebSocketGameStatusTests extends WebSocketEndpointTestSupport {
         player(team).send(new MakeMoveCommand(username(team) + "-token", gameID, move));
     }
 
-    private SocketClient player(ChessGame.TeamColor team) {
-        return team == ChessGame.TeamColor.WHITE ? white : black;
-    }
-
-    private String username(ChessGame.TeamColor team) {
-        return team == ChessGame.TeamColor.WHITE ? "white" : "black";
-    }
-
     private void assertMoveAndStatus(ChessGame expected, ChessGame.TeamColor movingTeam, String status)
             throws Exception {
         for (SocketClient client : List.of(white, black, observer)) {
@@ -231,11 +197,5 @@ public class WebSocketGameStatusTests extends WebSocketEndpointTestSupport {
             Assertions.assertEquals(expected, gameDAO.getGame(gameID).game());
             assertAllQuiet();
         }
-    }
-
-    private void assertAllQuiet() throws Exception {
-        white.assertNoMessage();
-        black.assertNoMessage();
-        observer.assertNoMessage();
     }
 }

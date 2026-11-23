@@ -5,10 +5,8 @@ import chess.ChessGame;
 import chess.ChessMove;
 import chess.ChessPiece;
 import chess.ChessPosition;
-import dataaccess.MemoryGameDAO;
 import model.GameData;
 import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -22,31 +20,7 @@ import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
 
-public class WebSocketMoveTests extends WebSocketEndpointTestSupport {
-
-    private ControlledGameDAO controlledGames;
-    private SocketClient white;
-    private SocketClient black;
-    private SocketClient observer;
-
-    @Override
-    protected MemoryGameDAO createGameDAO() {
-        controlledGames = new ControlledGameDAO();
-        return controlledGames;
-    }
-
-    @BeforeEach
-    public void connectParticipants() throws Exception {
-        white = openSocket();
-        black = openSocket();
-        observer = openSocket();
-        connect(white, "white-token", gameID);
-        connect(black, "black-token", gameID);
-        assertNotice(white, "black", "BLACK");
-        connect(observer, "observer-token", gameID);
-        assertNotice(white, "observer", "observer");
-        assertNotice(black, "observer", "observer");
-    }
+public class WebSocketMoveTests extends ConnectedGameTestSupport {
 
     @Test
     public void legalMovesUpdateAllBoardsAndNotifyOnlyTheOtherParticipants() throws Exception {
@@ -278,21 +252,10 @@ public class WebSocketMoveTests extends WebSocketEndpointTestSupport {
                         new ChessPosition(2, 5), new ChessPosition(4, 5), ChessPiece.PieceType.QUEEN)));
     }
 
-    private static ChessMove move(int startRow, int startColumn, int endRow, int endColumn) {
-        return new ChessMove(new ChessPosition(startRow, startColumn),
-                new ChessPosition(endRow, endColumn), null);
-    }
-
     private void assertRejectedMove(SocketClient sender, ChessGame before) throws Exception {
         assertError(sender);
         Assertions.assertEquals(before, gameDAO.getGame(gameID).game());
         assertAllQuiet();
-    }
-
-    private void assertAllQuiet() throws Exception {
-        white.assertNoMessage();
-        black.assertNoMessage();
-        observer.assertNoMessage();
     }
 
     private void assertMoveDelivered(ChessGame expected, SocketClient mover, String username, ChessMove move)
@@ -327,5 +290,4 @@ public class WebSocketMoveTests extends WebSocketEndpointTestSupport {
     private String square(ChessPosition position) {
         return "" + (char) ('a' + position.getColumn() - 1) + position.getRow();
     }
-
 }

@@ -9,7 +9,12 @@ final class MoveValidator {
     private MoveValidator() {
     }
 
-    static String validate(ChessGame game, ChessGame.TeamColor color, ChessMove move, String[] tokens) {
+    /**
+     * Checks the rules the client can verify locally; the server still decides whether the move is legal.
+     *
+     * @return a message explaining why the move cannot be sent, or null if it can be sent
+     */
+    static String validate(ChessGame game, ChessGame.TeamColor color, ChessMove move) {
         if (color == null) {
             return "Observers cannot make moves.";
         }
@@ -26,7 +31,8 @@ final class MoveValidator {
         boolean promotes = piece.getPieceType() == ChessPiece.PieceType.PAWN
                 && move.getEndPosition().getRow() == (color == ChessGame.TeamColor.WHITE ? 8 : 1);
         if (promotes && move.getPromotionPiece() == null) {
-            return "Choose a promotion piece: move " + tokens[1] + " " + tokens[2]
+            return "Choose a promotion piece: move " + MoveParser.formatPosition(move.getStartPosition())
+                    + " " + MoveParser.formatPosition(move.getEndPosition())
                     + " <" + MoveParser.PROMOTION_CHOICES + ">.";
         }
         if (!promotes && move.getPromotionPiece() != null) {

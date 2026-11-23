@@ -2,12 +2,9 @@ package server.websocket;
 
 import chess.ChessGame;
 import chess.ChessMove;
-import chess.ChessPosition;
-import dataaccess.MemoryGameDAO;
 import model.AuthData;
 import model.GameData;
 import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -24,31 +21,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.stream.Stream;
 
-public class WebSocketLeaveTests extends WebSocketEndpointTestSupport {
-
-    private ControlledGameDAO controlledGames;
-    private SocketClient white;
-    private SocketClient black;
-    private SocketClient observer;
-
-    @Override
-    protected MemoryGameDAO createGameDAO() {
-        controlledGames = new ControlledGameDAO();
-        return controlledGames;
-    }
-
-    @BeforeEach
-    public void connectParticipants() throws Exception {
-        white = openSocket();
-        black = openSocket();
-        observer = openSocket();
-        connect(white, "white-token", gameID);
-        connect(black, "black-token", gameID);
-        assertNotice(white, "black", "BLACK");
-        connect(observer, "observer-token", gameID);
-        assertNotice(white, "observer", "observer");
-        assertNotice(black, "observer", "observer");
-    }
+public class WebSocketLeaveTests extends ConnectedGameTestSupport {
 
     @ParameterizedTest
     @EnumSource(ChessGame.TeamColor.class)
@@ -327,30 +300,12 @@ public class WebSocketLeaveTests extends WebSocketEndpointTestSupport {
                 Arguments.of("white-token", 999));
     }
 
-    private GameData snapshot() throws Exception {
-        GameData stored = gameDAO.getGame(gameID);
-        return new GameData(stored.gameID(), stored.whiteUsername(), stored.blackUsername(),
-                stored.gameName(), new ChessGame(stored.game()));
-    }
-
-    private SocketClient player(ChessGame.TeamColor color) {
-        return color == ChessGame.TeamColor.WHITE ? white : black;
-    }
-
-    private String username(ChessGame.TeamColor color) {
-        return color == ChessGame.TeamColor.WHITE ? "white" : "black";
-    }
-
     private ChessGame.TeamColor opposite(ChessGame.TeamColor color) {
         return color == ChessGame.TeamColor.WHITE ? ChessGame.TeamColor.BLACK : ChessGame.TeamColor.WHITE;
     }
 
     private String playerName(GameData game, ChessGame.TeamColor color) {
         return color == ChessGame.TeamColor.WHITE ? game.whiteUsername() : game.blackUsername();
-    }
-
-    private ChessMove move(int fromRow, int fromColumn, int toRow, int toColumn) {
-        return new ChessMove(new ChessPosition(fromRow, fromColumn), new ChessPosition(toRow, toColumn), null);
     }
 
     private void assertLeaveDelivered(SocketClient departing, String username) throws Exception {
@@ -376,11 +331,5 @@ public class WebSocketLeaveTests extends WebSocketEndpointTestSupport {
             }
         }
         Assertions.assertEquals(expected, gameDAO.getGame(gameID).game());
-    }
-
-    private void assertAllQuiet() throws Exception {
-        white.assertNoMessage();
-        black.assertNoMessage();
-        observer.assertNoMessage();
     }
 }

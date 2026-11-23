@@ -87,22 +87,36 @@ final class GameCommandHandler {
             return "Color must be WHITE or BLACK.";
         }
 
-        try {
-            String occupant = playerColor == ChessGame.TeamColor.WHITE
-                    ? selectedGame.whiteUsername() : selectedGame.blackUsername();
-            if (!auth.username().equals(occupant)) {
-                serverFacade.joinGame(auth.authToken(), playerColor, selectedGame.gameID());
-            }
-        } catch (ServerFacadeException exception) {
-            if ("Error: already taken".equals(exception.getMessage())) {
-                return "That color is already taken.";
-            }
-
-            throw exception;
+        if (!claimSeat(auth, selectedGame, playerColor)) {
+            return "That color is already taken.";
         }
 
         clearDisplayedGames();
         return gameplay.connect(auth, selectedGame, playerColor);
+    }
+
+    /**
+     * Joins the selected color, or keeps the seat when the user already holds it.
+     *
+     * @return false if another user holds the color
+     */
+    private boolean claimSeat(AuthData auth, GameSummary game, ChessGame.TeamColor color)
+            throws ServerFacadeException {
+        String occupant = color == ChessGame.TeamColor.WHITE ? game.whiteUsername() : game.blackUsername();
+        if (auth.username().equals(occupant)) {
+            return true;
+        }
+
+        try {
+            serverFacade.joinGame(auth.authToken(), color, game.gameID());
+            return true;
+        } catch (ServerFacadeException exception) {
+            if ("Error: already taken".equals(exception.getMessage())) {
+                return false;
+            }
+
+            throw exception;
+        }
     }
 
     private String observeGame(String[] tokens, AuthData auth) {

@@ -7,6 +7,8 @@ import com.google.gson.JsonParseException;
 import dataaccess.DataAccessException;
 import io.javalin.websocket.WsMessageContext;
 import org.eclipse.jetty.websocket.api.Session;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import service.GameLockManager;
 import service.GameplayService;
 import service.exception.BadRequestException;
@@ -26,7 +28,12 @@ import websocket.messages.ErrorMessage;
 import websocket.messages.LoadGameMessage;
 import websocket.messages.NotificationMessage;
 
+/**
+ * Handles gameplay commands and sends the resulting messages to connected clients.
+ */
 public final class WebSocketHandler {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(WebSocketHandler.class);
 
     private final GameplayService gameplayService;
     private final ConnectionManager connections;
@@ -62,6 +69,7 @@ public final class WebSocketHandler {
         } catch (UnauthorizedException | InvalidMoveException exception) {
             connections.send(context.session, new ErrorMessage(exception.getMessage()));
         } catch (DataAccessException | RuntimeException exception) {
+            LOGGER.error("Unable to process a WebSocket command.", exception);
             connections.send(context.session, new ErrorMessage("internal server error"));
         }
     }

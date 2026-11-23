@@ -6,7 +6,6 @@ import chess.ChessPosition;
 import ui.BoardRenderer;
 
 import java.util.HashSet;
-import java.util.Locale;
 import java.util.Set;
 
 final class GameBoardView {
@@ -30,7 +29,7 @@ final class GameBoardView {
         } catch (IllegalArgumentException exception) {
             return exception.getMessage();
         }
-        String square = tokens[1].toLowerCase(Locale.ROOT);
+        String square = MoveParser.formatPosition(selected);
         if (game.getBoard().getPiece(selected) == null) {
             return "There is no piece at " + square + ".";
         }

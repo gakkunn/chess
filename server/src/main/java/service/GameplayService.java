@@ -20,6 +20,9 @@ import service.result.LeaveGameResult;
 import service.result.MakeMoveResult;
 import service.result.ResignGameResult;
 
+/**
+ * Implements gameplay operations on stored games for connected players and observers.
+ */
 public class GameplayService {
 
     private final AuthDAO authDAO;
@@ -38,43 +41,21 @@ public class GameplayService {
 
     public ConnectGameResult connect(ConnectGameRequest request)
             throws BadRequestException, UnauthorizedException, DataAccessException {
-        if (request == null || request.gameID() == null || request.gameID() <= 0) {
+        if (request == null) {
             throw new BadRequestException();
         }
 
-        if (request.authToken() == null || request.authToken().isBlank()) {
-            throw new UnauthorizedException();
-        }
-
-        AuthData auth = authDAO.getAuth(request.authToken());
-        if (auth == null) {
-            throw new UnauthorizedException();
-        }
-
-        GameData game = gameDAO.getGame(request.gameID());
-        if (game == null) {
-            throw new BadRequestException();
-        }
-
-        ChessGame.TeamColor color = null;
-        if (auth.username().equals(game.whiteUsername())) {
-            color = ChessGame.TeamColor.WHITE;
-        } else if (auth.username().equals(game.blackUsername())) {
-            color = ChessGame.TeamColor.BLACK;
-        }
-
-        return new ConnectGameResult(auth.username(), game, color);
+        return findParticipant(request.authToken(), request.gameID());
     }
 
     public MakeMoveResult makeMove(MakeMoveRequest request)
             throws BadRequestException, UnauthorizedException, DataAccessException, InvalidMoveException {
-        if (request == null || request.gameID() == null || request.gameID() <= 0) {
+        if (request == null || !isValidGameID(request.gameID())) {
             throw new BadRequestException();
         }
 
         synchronized (gameLocks.forGame(request.gameID())) {
-            ConnectGameResult player = connect(
-                    new ConnectGameRequest(request.authToken(), request.gameID()));
+            ConnectGameResult player = findParticipant(request.authToken(), request.gameID());
             requireCurrentPlayer(player);
             requireMovePositions(request.move());
 
@@ -93,13 +74,12 @@ public class GameplayService {
 
     public LeaveGameResult leave(LeaveGameRequest request)
             throws BadRequestException, UnauthorizedException, DataAccessException {
-        if (request == null || request.gameID() == null || request.gameID() <= 0) {
+        if (request == null || !isValidGameID(request.gameID())) {
             throw new BadRequestException();
         }
 
         synchronized (gameLocks.forGame(request.gameID())) {
-            ConnectGameResult participant = connect(
-                    new ConnectGameRequest(request.authToken(), request.gameID()));
+            ConnectGameResult participant = findParticipant(request.authToken(), request.gameID());
             GameData storedGame = participant.game();
             String username = participant.username();
             boolean leavesWhite = username.equals(storedGame.whiteUsername());
@@ -119,13 +99,12 @@ public class GameplayService {
 
     public ResignGameResult resign(ResignGameRequest request)
             throws BadRequestException, UnauthorizedException, DataAccessException, InvalidMoveException {
-        if (request == null || request.gameID() == null || request.gameID() <= 0) {
+        if (request == null || !isValidGameID(request.gameID())) {
             throw new BadRequestException();
         }
 
         synchronized (gameLocks.forGame(request.gameID())) {
-            ConnectGameResult player = connect(
-                    new ConnectGameRequest(request.authToken(), request.gameID()));
+            ConnectGameResult player = findParticipant(request.authToken(), request.gameID());
             requireActivePlayer(player, "resign");
             GameData storedGame = player.game();
             ChessGame completedGame = new ChessGame(storedGame.game());
@@ -136,6 +115,50 @@ public class GameplayService {
 
             return new ResignGameResult(player.username());
         }
+    }
+
+    /**
+     * Authenticates the user and loads the stored game together with the user's color, if any.
+     */
+    private ConnectGameResult findParticipant(String authToken, Integer gameID)
+            throws BadRequestException, UnauthorizedException, DataAccessException {
+        if (!isValidGameID(gameID)) {
+            throw new BadRequestException();
+        }
+
+        AuthData auth = requireAuth(authToken);
+        GameData game = gameDAO.getGame(gameID);
+        if (game == null) {
+            throw new BadRequestException();
+        }
+
+        return new ConnectGameResult(auth.username(), game, playerColor(auth.username(), game));
+    }
+
+    private AuthData requireAuth(String authToken) throws UnauthorizedException, DataAccessException {
+        if (authToken == null || authToken.isBlank()) {
+            throw new UnauthorizedException();
+        }
+
+        AuthData auth = authDAO.getAuth(authToken);
+        if (auth == null) {
+            throw new UnauthorizedException();
+        }
+        return auth;
+    }
+
+    private ChessGame.TeamColor playerColor(String username, GameData game) {
+        if (username.equals(game.whiteUsername())) {
+            return ChessGame.TeamColor.WHITE;
+        }
+        if (username.equals(game.blackUsername())) {
+            return ChessGame.TeamColor.BLACK;
+        }
+        return null;
+    }
+
+    private boolean isValidGameID(Integer gameID) {
+        return gameID != null && gameID > 0;
     }
 
     private String updateGameStatus(ChessGame game, GameData storedGame) {

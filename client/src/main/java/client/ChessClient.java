@@ -29,6 +29,16 @@ public class ChessClient implements AutoCloseable {
             "  help - Show available commands",
             "  quit - Exit the chess client");
 
+    private static final String CONNECTING_HELP = String.join(
+            System.lineSeparator(),
+            "Waiting for the game board.",
+            "  leave - Leave the game",
+            "  help - Show available commands",
+            "  quit - Exit the chess client");
+
+    private static final String SESSION_EXPIRED =
+            "Your session is no longer valid. Please sign in again.";
+
     private final ServerFacade serverFacade;
     private final GameCommandHandler gameCommandHandler;
     private final GameplaySession gameplay;
@@ -124,12 +134,9 @@ public class ChessClient implements AutoCloseable {
 
     private String evaluateGameCommand(String command, String[] tokens) {
         try {
-            AuthData currentSession;
-            synchronized (sessionLock) {
-                currentSession = session;
-            }
+            AuthData currentSession = currentSession();
             if (currentSession == null) {
-                return "Your session is no longer valid. Please sign in again.";
+                return SESSION_EXPIRED;
             }
             return gameCommandHandler.evaluate(
                     command,
@@ -185,18 +192,21 @@ public class ChessClient implements AutoCloseable {
         }
 
         try {
-            AuthData currentSession;
-            synchronized (sessionLock) {
-                currentSession = session;
-            }
+            AuthData currentSession = currentSession();
             if (currentSession == null) {
-                return "Your session is no longer valid. Please sign in again.";
+                return SESSION_EXPIRED;
             }
             serverFacade.logout(currentSession.authToken());
             clearSession();
             return "Signed out.";
         } catch (ServerFacadeException exception) {
             return authenticatedUserMessage(exception);
+        }
+    }
+
+    private AuthData currentSession() {
+        synchronized (sessionLock) {
+            return session;
         }
     }
 
@@ -226,9 +236,7 @@ public class ChessClient implements AutoCloseable {
 
         return switch (getState()) {
             case SIGNED_IN -> POSTLOGIN_HELP;
-            case CONNECTING -> "Waiting for the game board." + System.lineSeparator()
-                    + "  leave - Cancel the game connection" + System.lineSeparator()
-                    + "  help - Show available commands" + System.lineSeparator() + "  quit - Exit the chess client";
+            case CONNECTING -> CONNECTING_HELP;
             case IN_GAME -> gameplay.help();
             default -> PRELOGIN_HELP;
         };
@@ -292,7 +300,7 @@ public class ChessClient implements AutoCloseable {
             ServerFacadeException exception) {
         if ("Error: unauthorized".equals(exception.getMessage())) {
             clearSession();
-            return "Your session is no longer valid. Please sign in again.";
+            return SESSION_EXPIRED;
         }
 
         return userMessage(exception);

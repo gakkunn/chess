@@ -3,6 +3,7 @@ package websocket;
 import chess.ChessGame;
 import chess.ChessPiece;
 import com.google.gson.Gson;
+import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParseException;
@@ -20,6 +21,8 @@ import java.util.Objects;
  * Converts WebSocket JSON to the command or message indicated by its type field.
  */
 public final class WebSocketMessageCodec {
+
+    private static final int BOARD_SIZE = 8;
 
     private final Gson serializer = new Gson();
 
@@ -62,11 +65,7 @@ public final class WebSocketMessageCodec {
             }
             case NOTIFICATION -> {
                 requireString(object, "message");
-                JsonElement gameOver = object.get("gameOver");
-                if (gameOver != null && !gameOver.isJsonNull()
-                        && (!gameOver.isJsonPrimitive() || !gameOver.getAsJsonPrimitive().isBoolean())) {
-                    throw new JsonParseException("The notification completion flag must be a boolean.");
-                }
+                requireOptionalBoolean(object, "gameOver");
                 yield serializer.fromJson(object, NotificationMessage.class);
             }
         };
@@ -75,32 +74,39 @@ public final class WebSocketMessageCodec {
     private LoadGameMessage deserializeLoadGame(JsonObject object) {
         JsonObject game = requireObject(object, "game");
         readType(game, "teamTurn", ChessGame.TeamColor.class);
-        JsonObject board = requireObject(game, "board");
-        JsonElement squares = board.get("squares");
-
-        if (squares == null || !squares.isJsonArray() || squares.getAsJsonArray().size() != 8) {
-            throw new JsonParseException("The game must contain an 8 by 8 board.");
-        }
-        for (JsonElement row : squares.getAsJsonArray()) {
-            if (!row.isJsonArray() || row.getAsJsonArray().size() != 8) {
-                throw new JsonParseException("The game must contain an 8 by 8 board.");
-            }
-            for (JsonElement square : row.getAsJsonArray()) {
-                if (!square.isJsonNull()) {
-                    if (!square.isJsonObject()) {
-                        throw new JsonParseException("A board square must contain a piece or null.");
-                    }
-                    readType(square.getAsJsonObject(), "teamColor", ChessGame.TeamColor.class);
-                    readType(square.getAsJsonObject(), "pieceType", ChessPiece.PieceType.class);
-                }
-            }
-        }
-        JsonElement gameOver = game.get("gameOver");
-        if (gameOver != null && (!gameOver.isJsonPrimitive() || !gameOver.getAsJsonPrimitive().isBoolean())) {
-            throw new JsonParseException("The game completion flag must be a boolean.");
-        }
+        requireBoard(requireObject(game, "board"));
+        requireOptionalBoolean(game, "gameOver");
 
         return serializer.fromJson(object, LoadGameMessage.class);
+    }
+
+    private void requireBoard(JsonObject board) {
+        JsonArray rows = requireBoardArray(board.get("squares"));
+        for (JsonElement row : rows) {
+            for (JsonElement square : requireBoardArray(row)) {
+                requirePieceOrEmpty(square);
+            }
+        }
+    }
+
+    private JsonArray requireBoardArray(JsonElement element) {
+        if (element == null || !element.isJsonArray() || element.getAsJsonArray().size() != BOARD_SIZE) {
+            throw new JsonParseException("The game must contain an 8 by 8 board.");
+        }
+
+        return element.getAsJsonArray();
+    }
+
+    private void requirePieceOrEmpty(JsonElement square) {
+        if (square.isJsonNull()) {
+            return;
+        }
+        if (!square.isJsonObject()) {
+            throw new JsonParseException("A board square must contain a piece or null.");
+        }
+
+        readType(square.getAsJsonObject(), "teamColor", ChessGame.TeamColor.class);
+        readType(square.getAsJsonObject(), "pieceType", ChessPiece.PieceType.class);
     }
 
     private JsonObject parseObject(String json) {
@@ -135,6 +141,14 @@ public final class WebSocketMessageCodec {
         }
 
         return value.getAsString();
+    }
+
+    private void requireOptionalBoolean(JsonObject object, String field) {
+        JsonElement value = object.get(field);
+        if (value != null && !value.isJsonNull()
+                && (!value.isJsonPrimitive() || !value.getAsJsonPrimitive().isBoolean())) {
+            throw new JsonParseException("A boolean is required for " + field + ".");
+        }
     }
 
     private <T extends Enum<T>> T readType(

@@ -33,6 +33,10 @@ final class MoveParser {
         return new ChessPosition(normalized.charAt(1) - '0', normalized.charAt(0) - 'a' + 1);
     }
 
+    static String formatPosition(ChessPosition position) {
+        return "" + (char) ('a' + position.getColumn() - 1) + position.getRow();
+    }
+
     private static ChessPiece.PieceType parsePromotion(String piece) {
         return switch (piece.toUpperCase(Locale.ROOT)) {
             case "QUEEN" -> ChessPiece.PieceType.QUEEN;
